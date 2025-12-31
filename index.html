@@ -1,10 +1,11 @@
 <!DOCTYPE html>
+
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contador de Efectivo Paraguay</title>
-    <style>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Contador de Efectivo Paraguay</title>
+<style>
         * {
             margin: 0;
             padding: 0;
@@ -702,6 +703,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
             padding: 12px 15px;
             margin-bottom: 8px;
             background: #f8f9fa;
@@ -771,11 +774,24 @@
         }
 
         .compact-item-total {
-            font-size: 15px;
-            font-weight: bold;
-            color: #28a745;
-            min-width: 120px;
+            /* Badge grande y claro para ver el subtotal */
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+
+            font-size: 18px;
+            font-weight: 900;
+            color: #166534; /* verde oscuro */
+
+            background: #dcfce7; /* verde claro */
+            border: 2px solid #86efac;
+            padding: 8px 10px;
+            border-radius: 12px;
+
+            min-width: clamp(110px, 22vw, 160px);
             text-align: right;
+            white-space: nowrap;
         }
 
         @media (max-width: 768px) {
@@ -978,134 +994,199 @@
     }
     .small-note{ font-size: 12px; color:#475569; margin-top: 6px; line-height: 1.3; }
     
+    
+
+    /* Tabs (Conteo / Historial) */
+    .app-tabs{
+        margin-top: 12px;
+        display:flex;
+        gap: 10px;
+        background: rgba(255,255,255,.12);
+        padding: 8px;
+        border-radius: 14px;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+    }
+    .tab-btn{
+        flex: 1;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 12px;
+        font-weight: 800;
+        cursor: pointer;
+        background: rgba(255,255,255,.18);
+        color: #fff;
+    }
+    .tab-btn.active{
+        background: rgba(255,255,255,.95);
+        color: #111827;
+    }
+    .tab-content{ padding-top: 0px; }
+
+    /* UI polish + evitar texto invisible (modo oscuro forzado en algunos móviles) */
+    :root { color-scheme: light; }
+    input, select, textarea {
+        background-color: #ffffff !important;
+        color: #111827 !important;
+        -webkit-text-fill-color: #111827 !important;
+        caret-color: #111827 !important;
+    }
+    input::placeholder { color: #9ca3af !important; }
+
+    /* En modo pestañas, ya no necesitamos el botón/close del historial */
+    .btn-history { display: none !important; }
+    .btn-close-history { display: none !important; }
+
+    /* Título de historial redundante (ya está la pestaña) */
+    #tabHistorial .history-header h3 { margin: 0; font-size: 16px; }
+
+    
+/* Fix: que se vean bien los números en inputs (especialmente type=number con spinners) */
+.compact-denomination-input{
+    /* Más ancho y adaptable (evita que se corte el número en móvil) */
+    width: clamp(92px, 18vw, 132px);
+    min-width: 92px;
+    flex: 0 0 auto;
+
+    text-align: center;
+    font-weight: 900;
+    font-size: 20px; /* mejor legibilidad en móvil */
+    line-height: 1.2;
+
+    padding: 8px 6px; /* menos padding para más espacio real */
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+
+    background: #ffffff !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    caret-color: #111827 !important;
+}
+.compact-denomination-input:focus{
+    outline:none;
+    border-color:#667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,.15);
+}
+/* Quitar flechitas/spinners que se comen el espacio del número */
+.compact-denomination-input::-webkit-outer-spin-button,
+.compact-denomination-input::-webkit-inner-spin-button{
+    -webkit-appearance: none;
+    margin: 0;
+}
+.compact-denomination-input{
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+    
+    /* Ocultar flechas del input number (evita que tape el número) */
+    input[type=number]::-webkit-outer-spin-button,
+    input[type=number]::-webkit-inner-spin-button{
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    input[type=number]{ -moz-appearance: textfield; }
+
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>💰 Contador de Efectivo</h1>
-            <p>Paraguay - Guaraníes</p>
-            
-            <div class="business-info">
-                <input type="text" id="businessName" placeholder="Nombre del Negocio" class="business-input">
-                <input type="date" id="countDate" class="date-input">
-            </div>
-            
-            <div class="total-display">
-                <div class="label">TOTAL</div>
-                <div class="amount" id="totalAmount">₲ 0</div>
-            </div>
-        </div>
-
-        <div class="content">
-            <!-- Conteo General Section -->
-            <div class="general-count-section" id="generalCountSection" style="display: none;">
-                <div class="section-title">📊 Conteo General</div>
-                
-                <div class="general-grid">
-                    <div class="general-item">
-                        <label>🏦 Bancos</label>
-                        <input type="number" id="bancos" value="0" min="0" onchange="updateGeneralTotal()">
-                        <div class="item-value">₲ <span id="display-bancos">0</span></div>
-                    </div>
-
-                    <div class="general-item">
-                        <label>💳 Tarjeta</label>
-                        <input type="number" id="tarjeta" value="0" min="0" onchange="updateGeneralTotal()">
-                        <div class="item-value">₲ <span id="display-tarjeta">0</span></div>
-                    </div>
-
-                    <div class="general-item">
-                        <label>📱 Wepa</label>
-                        <input type="number" id="wepa" value="0" min="0" onchange="updateGeneralTotal()">
-                        <div class="item-value">₲ <span id="display-wepa">0</span></div>
-                    </div>
-
-                    <div class="general-item">
-                        <label>🌐 Infonet</label>
-                        <input type="number" id="infonet" value="0" min="0" onchange="updateGeneralTotal()">
-                        <div class="item-value">₲ <span id="display-infonet">0</span></div>
-                    </div>
-
-                    <div class="general-item efectivo-item">
-                        <label>💵 Efectivo Contado</label>
-                        <div class="item-value large">₲ <span id="display-efectivo">0</span></div>
-                    </div>
-                </div>
-
-                <!-- Resumen Final -->
-                <div class="final-summary">
-                    <div class="summary-row total-row">
-                        <label>💰 TOTAL</label>
-                        <div class="summary-value">₲ <span id="totalGeneral">0</span></div>
-                    </div>
-
-                    <div class="summary-row">
-                        <label>📋 Debo Tener</label>
-                        <input type="number" id="deboTener" value="0" min="0" onchange="calculateDiscrepancy()" placeholder="Ingrese el valor esperado">
-                    </div>
-
-                    <div class="summary-row discrepancy-row" id="discrepancyRow">
-                        <label>⚖️ Descuadre</label>
-                        <div class="summary-value" id="descuadreValue">₲ 0</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Conteo de Efectivo -->
-            <div class="compact-cash-section">
-                <div class="section-title">💵 Conteo de Efectivo</div>
-                <div class="compact-cash-grid">
-                    <div class="compact-column">
-                        <h4>💵 Billetes</h4>
-                        <div id="billetesCompact"></div>
-                    </div>
-                    <div class="compact-column">
-                        <h4>🪙 Monedas</h4>
-                        <div id="monedasCompact"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Valores Adicionales -->
-            <div class="extra-amount">
-                <h3>➕ Agregar Valor Adicional</h3>
-                <div class="extra-input-group">
-                    <input type="text" id="extraDescription" placeholder="Descripción (ej: Tarjetas, Transferencias)">
-                    <input type="number" id="extraValue" placeholder="Monto" min="0">
-                    <button onclick="addExtraAmount()">Agregar</button>
-                </div>
-                <div class="extra-amounts-list" id="extraList"></div>
-            </div>
-
-            <!-- Acciones -->
-            <div class="actions">
-                <button class="btn-save" onclick="saveRecord()">💾 Guardar Registro</button>
-                <button class="btn-history" onclick="toggleHistory()">📋 Ver Historial</button>
-                <button class="btn-reset" onclick="resetAll()">🔄 Reiniciar</button>
-            </div>
-
-            <!-- Historial -->
-            <div class="history-section" id="historySection" style="display: none;">
-                <div class="history-header">
-                    <h3>📊 Historial de Conteos</h3>
-                    <button class="btn-close-history" onclick="toggleHistory()">✕</button>
-                </div>
-                <div class="history-filters">
-                    <input type="text" id="filterBusiness" placeholder="Filtrar por negocio" onkeyup="filterHistory()">
-                    <input type="date" id="filterDate" onchange="filterHistory()">
-                    <button onclick="clearFilters()">Limpiar</button>
-                </div>
-                <div class="history-list" id="historyList"></div>
-                <div class="history-actions">
-                    <button class="btn-export" onclick="exportHistory()">📥 Exportar CSV</button>
-                    <button class="btn-clear" onclick="clearHistory()">🗑️ Borrar Todo</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
+<div class="container">
+<div class="header">
+<h1>💰 Contador de Efectivo</h1>
+<p>Paraguay - Guaraníes</p>
+<div class="business-info">
+<input class="business-input" id="businessName" placeholder="Nombre del Negocio" type="text"/>
+<input class="date-input" id="countDate" type="date"/>
+</div>
+<div class="total-display">
+<div class="label">TOTAL</div>
+<div class="amount" id="totalAmount">₲ 0</div>
+</div>
+<div class="app-tabs"><button class="tab-btn active" id="tabBtnConteo" type="button">Conteo</button><button class="tab-btn" id="tabBtnHistorial" type="button">Historial</button></div></div>
+<div class="content"><div class="tab-content" id="tabConteo"><div class="general-count-section" id="generalCountSection" style="display: none;">
+<div class="section-title">📊 Conteo General</div>
+<div class="general-grid">
+<div class="general-item">
+<label>🏦 Bancos</label>
+<input id="bancos" min="0" onchange="updateGeneralTotal()" type="number" value="0"/>
+<div class="item-value">₲ <span id="display-bancos">0</span></div>
+</div>
+<div class="general-item">
+<label>💳 Tarjeta</label>
+<input id="tarjeta" min="0" onchange="updateGeneralTotal()" type="number" value="0"/>
+<div class="item-value">₲ <span id="display-tarjeta">0</span></div>
+</div>
+<div class="general-item">
+<label>📱 Wepa</label>
+<input id="wepa" min="0" onchange="updateGeneralTotal()" type="number" value="0"/>
+<div class="item-value">₲ <span id="display-wepa">0</span></div>
+</div>
+<div class="general-item">
+<label>🌐 Infonet</label>
+<input id="infonet" min="0" onchange="updateGeneralTotal()" type="number" value="0"/>
+<div class="item-value">₲ <span id="display-infonet">0</span></div>
+</div>
+<div class="general-item efectivo-item">
+<label>💵 Efectivo Contado</label>
+<div class="item-value large">₲ <span id="display-efectivo">0</span></div>
+</div>
+</div>
+<!-- Resumen Final -->
+<div class="final-summary">
+<div class="summary-row total-row">
+<label>💰 TOTAL</label>
+<div class="summary-value">₲ <span id="totalGeneral">0</span></div>
+</div>
+<div class="summary-row">
+<label>📋 Debo Tener</label>
+<input id="deboTener" min="0" onchange="calculateDiscrepancy()" placeholder="Ingrese el valor esperado" type="number" value="0"/>
+</div>
+<div class="summary-row discrepancy-row" id="discrepancyRow">
+<label>⚖️ Descuadre</label>
+<div class="summary-value" id="descuadreValue">₲ 0</div>
+</div>
+</div>
+</div><div class="compact-cash-section">
+<div class="section-title">💵 Conteo de Efectivo</div>
+<div class="compact-cash-grid">
+<div class="compact-column">
+<h4>💵 Billetes</h4>
+<div id="billetesCompact"></div>
+</div>
+<div class="compact-column">
+<h4>🪙 Monedas</h4>
+<div id="monedasCompact"></div>
+</div>
+</div>
+</div><div class="extra-amount">
+<h3>➕ Agregar Valor Adicional</h3>
+<div class="extra-input-group">
+<input id="extraDescription" placeholder="Descripción (ej: Tarjetas, Transferencias)" type="text"/>
+<input id="extraValue" min="0" placeholder="Monto" type="number"/>
+<button onclick="addExtraAmount()">Agregar</button>
+</div>
+<div class="extra-amounts-list" id="extraList"></div>
+</div><div class="actions">
+<button class="btn-save" onclick="saveRecord()">💾 Guardar Registro</button>
+<button class="btn-history" onclick="toggleHistory()">📋 Ver Historial</button>
+<button class="btn-reset" onclick="resetAll()">🔄 Reiniciar</button>
+</div></div><div class="tab-content" id="tabHistorial" style="display:none;"><div class="history-section" id="historySection">
+<div class="history-header">
+<h3>📊 Historial de Conteos</h3>
+<button class="btn-close-history" onclick="toggleHistory()">✕</button>
+</div>
+<div class="history-filters">
+<input id="filterBusiness" onkeyup="filterHistory()" placeholder="Filtrar por negocio" type="text"/>
+<input id="filterDate" onchange="filterHistory()" type="date"/>
+<button onclick="clearFilters()">Limpiar</button>
+</div>
+<div class="history-list" id="historyList"></div>
+<div class="history-actions">
+<button class="btn-export" onclick="exportHistory()">📥 Exportar CSV</button>
+<button class="btn-clear" onclick="clearHistory()">🗑️ Borrar Todo</button>
+</div>
+</div></div></div>
+</div>
+<script>
         // Denominaciones de Paraguay
         const billetes = [100000, 50000, 20000, 10000, 5000, 2000];
         const monedas = [1000, 500, 100, 50];
@@ -1247,7 +1328,7 @@ function scheduleCloudPush(reason="cambio"){
 }
 
 // Pull
-async function cloudPull(reason="manual"){
+async function cloudPull(reason="manual", force=false){
     const binId = getBinId();
     if (!binId){ cloudStatus("❗ Falta Bin ID."); return; }
 
@@ -1462,7 +1543,7 @@ function initCloudUI() {
     binInput?.addEventListener('change', ()=> setBinId(binInput.value));
     typeSel?.addEventListener('change', ()=> setKeyType(typeSel.value));
 
-    document.getElementById('btnPull')?.addEventListener('click', ()=>cloudPull("manual"));
+    document.getElementById('btnPull')?.addEventListener('click', ()=>cloudPull("manual", true));
     document.getElementById('btnPush')?.addEventListener('click', ()=>cloudPush("manual"));
     document.getElementById('btnCopyBin')?.addEventListener('click', async ()=>{
         const id = getBinId();
@@ -1591,6 +1672,12 @@ let counts = {};
             // Nube/Backups
             initCloudUI();
             initSafety();
+            // Tabs
+            document.getElementById('tabBtnConteo')?.addEventListener('click', ()=>showAppTab('conteo'));
+            document.getElementById('tabBtnHistorial')?.addEventListener('click', ()=>showAppTab('historial'));
+            const lastTab = (localStorage.getItem('cash_activeTab') || 'conteo');
+            showAppTab(lastTab);
+
         }
 
         function setTodayDate() {
@@ -2205,71 +2292,98 @@ let counts = {};
 
         // Iniciar aplicación
         document.addEventListener('DOMContentLoaded', () => { init(); });
-</script>
 
-    <!-- ☁️ Nube / Backup -->
-    <button class="cloud-fab" id="cloudFab" title="Nube / Backup">☁️</button>
-    <div class="cloud-modal-backdrop" id="cloudBackdrop"></div>
-    <div class="cloud-modal" id="cloudModal" role="dialog" aria-modal="true" aria-label="Nube y Backup">
-        <header>
-            <h2>☁️ Nube & Backups</h2>
-            <button class="cloud-close" id="cloudClose" title="Cerrar">✕</button>
-        </header>
-        <div class="cloud-body">
-            <div class="cloud-grid">
-                <div class="cloud-card">
-                    <h3>🔑 JSONBin</h3>
-                    <div class="cloud-row" style="margin-bottom:10px;">
-                        <select id="jsonbinKeyType">
-                            <option value="access">X-Access-Key (recomendado)</option>
-                            <option value="master">X-Master-Key (no recomendado en público)</option>
-                        </select>
-                    </div>
-                    <div class="cloud-row" style="margin-bottom:10px;">
-                        <input id="jsonbinKeyInput" type="password" placeholder="Pegá tu API Key (se guarda en este dispositivo)">
-                    </div>
-                    <div class="cloud-row" style="margin-bottom:10px;">
-                        <input id="jsonbinIdInput" type="text" placeholder="Bin ID">
-                    </div>
-                    <div class="cloud-actions">
-                        <button class="btn-primary" id="btnPull">⬇️ Traer</button>
-                        <button class="btn-secondary" id="btnPush">⬆️ Subir</button>
-                        <button class="btn-ghost" id="btnCopyBin">📋 Copiar Bin</button>
-                    </div>
-                    <div class="small-note">
+
+
+        // =========================
+        // 🧭 Tabs: Conteo / Historial
+        // =========================
+        function showAppTab(which){
+            const conteo = document.getElementById('tabConteo');
+            const hist = document.getElementById('tabHistorial');
+            const historySection = document.getElementById('historySection');
+            const b1 = document.getElementById('tabBtnConteo');
+            const b2 = document.getElementById('tabBtnHistorial');
+
+            if (which === 'historial'){
+                if (conteo) conteo.style.display = 'none';
+                if (hist) hist.style.display = 'block';
+                if (historySection) historySection.style.display = 'block';
+                b1?.classList.remove('active');
+                b2?.classList.add('active');
+                try { renderHistory(); } catch(e) {}
+                localStorage.setItem('cash_activeTab','historial');
+            } else {
+                if (conteo) conteo.style.display = 'block';
+                if (hist) hist.style.display = 'none';
+                b2?.classList.remove('active');
+                b1?.classList.add('active');
+                try { updateTotal(); } catch(e) {}
+                localStorage.setItem('cash_activeTab','conteo');
+            }
+        }
+
+</script>
+<!-- ☁️ Nube / Backup -->
+<button class="cloud-fab" id="cloudFab" title="Nube / Backup">☁️</button>
+<div class="cloud-modal-backdrop" id="cloudBackdrop"></div>
+<div aria-label="Nube y Backup" aria-modal="true" class="cloud-modal" id="cloudModal" role="dialog">
+<header>
+<h2>☁️ Nube &amp; Backups</h2>
+<button class="cloud-close" id="cloudClose" title="Cerrar">✕</button>
+</header>
+<div class="cloud-body">
+<div class="cloud-grid">
+<div class="cloud-card">
+<h3>🔑 JSONBin</h3>
+<div class="cloud-row" style="margin-bottom:10px;">
+<select id="jsonbinKeyType">
+<option value="access">X-Access-Key (recomendado)</option>
+<option value="master">X-Master-Key (no recomendado en público)</option>
+</select>
+</div>
+<div class="cloud-row" style="margin-bottom:10px;">
+<input id="jsonbinKeyInput" placeholder="Pegá tu API Key (se guarda en este dispositivo)" type="password"/>
+</div>
+<div class="cloud-row" style="margin-bottom:10px;">
+<input id="jsonbinIdInput" placeholder="Bin ID" type="text"/>
+</div>
+<div class="cloud-actions">
+<button class="btn-primary" id="btnPull">⬇️ Traer</button>
+<button class="btn-secondary" id="btnPush">⬆️ Subir</button>
+<button class="btn-ghost" id="btnCopyBin">📋 Copiar Bin</button>
+</div>
+<div class="small-note">
                         Protección: si la nube está vacía, <b>no pisa</b> tus datos locales.
                     </div>
-                </div>
-
-                <div class="cloud-card">
-                    <h3>🛡️ Backup diario</h3>
-                    <div class="cloud-actions">
-                        <button class="btn-primary" id="btnBackupNow">💾 Guardar backup ahora</button>
-                        <button class="btn-ghost" id="btnDownloadBackup">⬇️ Descargar backup</button>
-                        <button class="btn-danger" id="btnRestoreBackup">♻️ Restaurar backup</button>
-                    </div>
-                    <div class="cloud-row" style="margin-top:10px;">
-                        <select id="backupDaySelect"></select>
-                    </div>
-                    <div class="small-note">
+</div>
+<div class="cloud-card">
+<h3>🛡️ Backup diario</h3>
+<div class="cloud-actions">
+<button class="btn-primary" id="btnBackupNow">💾 Guardar backup ahora</button>
+<button class="btn-ghost" id="btnDownloadBackup">⬇️ Descargar backup</button>
+<button class="btn-danger" id="btnRestoreBackup">♻️ Restaurar backup</button>
+</div>
+<div class="cloud-row" style="margin-top:10px;">
+<select id="backupDaySelect"></select>
+</div>
+<div class="small-note">
                         Guarda hasta 30 días en este dispositivo. Descargá un .json para guardar afuera.
                     </div>
-                </div>
-            </div>
-
-            <div class="cloud-card" style="margin-top:12px;">
-                <h3>📦 Importar / Exportar (Rescate)</h3>
-                <div class="cloud-actions">
-                    <button class="btn-ghost" id="btnExportJson">📤 Exportar datos (.json)</button>
-                    <label class="btn-ghost" for="importJsonFile">
+</div>
+</div>
+<div class="cloud-card" style="margin-top:12px;">
+<h3>📦 Importar / Exportar (Rescate)</h3>
+<div class="cloud-actions">
+<button class="btn-ghost" id="btnExportJson">📤 Exportar datos (.json)</button>
+<label class="btn-ghost" for="importJsonFile">
                         📥 Importar (.json)
-                        <input type="file" id="importJsonFile" accept="application/json" style="display:none;">
-                    </label>
-                </div>
-                <div class="cloud-status" id="cloudStatus">Estado: listo.</div>
-            </div>
-        </div>
-    </div>
-
+                        <input accept="application/json" id="importJsonFile" style="display:none;" type="file"/>
+</label>
+</div>
+<div class="cloud-status" id="cloudStatus">Estado: listo.</div>
+</div>
+</div>
+</div>
 </body>
 </html>
