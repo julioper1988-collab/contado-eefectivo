@@ -1321,7 +1321,13 @@ async function cloudPush(reason="manual"){
         if (!res.ok) throw new Error("HTTP " + res.status);
         setLocalLastModified(localLast);
         cloudStatus("✅ Sincronizado exitosamente.");
-    } catch(e){
+                // Confirmación rápida (por si el servidor normaliza datos)
+                setTimeout(()=>{
+                    const bin = getBinId();
+                    const key = getJsonbinKey();
+                    if (bin && key) cloudPull("post-push");
+                }, 1200);
+                } catch(e){
         cloudStatus("❌ Error sincronizando nube: " + (e?.message || e));
     }
 }
@@ -1523,13 +1529,41 @@ function initCloudUI() {
 
 // Auto: backup diario cuando abrís el sistema
 function initSafety(){
-    backupDaily(false);
-    // Pull suave cada 25s si hay bin+key
-    setInterval(()=>{
-        const bin = getBinId();
-        const key = getJsonbinKey();
-        if (bin && key) cloudPull("auto");
-    }, 25000);
+            backupDaily(false);
+
+            // Auto-pull "en vivo":
+            // - pestaña visible: cada 5s
+            // - segundo plano: cada 25s (los navegadores igual suelen limitar)
+            let autoPullTimer = null;
+
+            function startAutoPull(){
+                if (autoPullTimer) clearInterval(autoPullTimer);
+                const period = (document.visibilityState === 'visible') ? 5000 : 25000;
+                autoPullTimer = setInterval(()=>{
+                    const bin = getBinId();
+                    const key = getJsonbinKey();
+                    if (bin && key) cloudPull("auto");
+                }, period);
+            }
+
+            // Pull al enfocarse (muy útil en móvil)
+            window.addEventListener('focus', ()=>{
+                const bin = getBinId();
+                const key = getJsonbinKey();
+                if (bin && key) cloudPull("focus");
+            });
+
+            document.addEventListener('visibilitychange', ()=>{
+                startAutoPull();
+                if (document.visibilityState === 'visible'){
+                    const bin = getBinId();
+                    const key = getJsonbinKey();
+                    if (bin && key) cloudPull("visible");
+                }
+            });
+
+            startAutoPull();
+        }, 25000);
 }
 
 let counts = {};
