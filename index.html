@@ -470,6 +470,13 @@
     close.currency = state.currency;
     close.label = row.business_name || "";
     close.cash = row.counts || { bills: {}, coins: {} };
+    // Normalizar estructura de counts por compatibilidad (registros viejos)
+    if(close.cash && !close.cash.bills && !close.cash.coins){
+      // si guardaste counts como mapa plano, lo mandamos a bills
+      close.cash = { bills: close.cash, coins: {} };
+    }
+    if(close.cash && !close.cash.bills) close.cash.bills = {};
+    if(close.cash && !close.cash.coins) close.cash.coins = {};
     close.extras = row.extra_amounts || [];
     close.accounts = {
       banks: row.general_count?.banks || 0,
@@ -595,9 +602,18 @@ function defaultClose(date, currency){
   }
 
   function ensureCashKeys(close){
-    const {bills, coins} = getDenoms();
-    for(const d of bills){ if(close.cash.bills[d] == null) close.cash.bills[d] = 0; }
-    for(const d of coins){ if(close.cash.coins[d] == null) close.cash.coins[d] = 0; }
+    if(!close) return;
+    if(!close.cash) close.cash = { bills: {}, coins: {} };
+    if(!close.cash.bills) close.cash.bills = {};
+    if(!close.cash.coins) close.cash.coins = {};
+
+    const { bills, coins } = getDenoms();
+    for(const d of bills){
+      if(close.cash.bills[d] == null) close.cash.bills[d] = 0;
+    }
+    for(const d of coins){
+      if(close.cash.coins[d] == null) close.cash.coins[d] = 0;
+    }
   }
 
   function cashSubtotal(close, bucketKey){
