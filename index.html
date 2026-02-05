@@ -264,6 +264,40 @@
 
     <div class="hr"></div>
 
+    
+    <div class="hr"></div>
+
+    <h2>Supabase (sincronización con tu proyecto)</h2>
+    <div class="note">Pegá tu <b>URL</b> y <b>Anon Key</b>. Usa tu tabla <b>cash_counts</b> (como tu proyecto actual). No requiere login; guarda/lee con tu anon key y tus políticas actuales.</div>
+
+    <div class="row">
+      <div>
+        <label class="small muted">SUPABASE_URL</label>
+        <input id="sbUrl" type="text" placeholder="https://xxxx.supabase.co" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label class="small muted">SUPABASE_ANON_KEY</label>
+        <input id="sbAnon" type="password" placeholder="eyJhbGciOi..." />
+      </div>
+    </div>
+<div class="btnRow">
+      <button class="ok" id="sbConnectBtn">Conectar</button>
+      <button id="sbTestBtn">Probar conexión</button>
+    </div>
+
+    <div class="btnRow" style="margin-top:10px;">
+      <button class="ok" id="sbPushBtn">Subir cierre (fecha actual)</button>
+      <button id="sbPullBtn">Bajar cierre (fecha actual)</button>
+      <button class="warn" id="sbPullAllBtn">Bajar TODO (historial)</button>
+    </div>
+
+    <div class="pill" style="margin-top:10px;">
+      <b class="mono">Estado Supabase:</b> <span id="sbStatus" class="mono">Desconectado</span>
+    </div>
+
+
     <h2>Backup</h2>
     <div class="btnRow">
       <button id="exportBtn">Exportar JSON</button>
@@ -274,6 +308,7 @@
   </aside>
 </main>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (() => {
   const PYG_BILLS = [100000, 50000, 20000, 10000, 5000, 2000];
@@ -284,8 +319,183 @@
   const $ = (id) => document.getElementById(id);
   const stateKey = "control_caja_cierres_v3_expected";
   let state = loadState() || defaultState("PYG");
+  
+  // =====================
+  // Supabase Sync (usa tabla: cash_counts)
+  // =====================
+  const SUPABASE_STORAGE_URL_KEY = 'cashCounter_supabase_url';
+  const SUPABASE_STORAGE_ANON_KEY = 'cashCounter_supabase_anon';
+  const DEFAULT_SUPABASE_URL = "https://gqgzluwptmgvzdewjusp.supabase.co";
+  const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_Gic4Jhw3keO6MyZtKV2nZA_jjXYiCnJ";
 
-  function defaultClose(date, currency){
+  let sbClient = null;
+  let sbReady = false;
+
+  function sbSetStatus(msg){ const el = $("sbStatus"); if(el) el.textContent = msg; }
+
+  function sbLoadConfig(){
+    // autocompletar defaults si no existen
+    if(!localStorage.getItem(SUPABASE_STORAGE_URL_KEY)) localStorage.setItem(SUPABASE_STORAGE_URL_KEY, DEFAULT_SUPABASE_URL);
+    if(!localStorage.getItem(SUPABASE_STORAGE_ANON_KEY)) localStorage.setItem(SUPABASE_STORAGE_ANON_KEY, DEFAULT_SUPABASE_ANON_KEY);
+
+    const url = localStorage.getItem(SUPABASE_STORAGE_URL_KEY) || DEFAULT_SUPABASE_URL;
+    const anon = localStorage.getItem(SUPABASE_STORAGE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY;
+
+    if($("sbUrl")) $("sbUrl").value = url;
+    if($("sbAnon")) $("sbAnon").value = anon;
+  }
+
+  function sbSaveConfig(url, anon){
+    localStorage.setItem(SUPABASE_STORAGE_URL_KEY, url || '');
+    localStorage.setItem(SUPABASE_STORAGE_ANON_KEY, anon || '');
+  }
+
+  function sbGetConfig(){
+    return {
+      url: ($("sbUrl")?.value || localStorage.getItem(SUPABASE_STORAGE_URL_KEY) || DEFAULT_SUPABASE_URL || "").trim(),
+      anon: ($("sbAnon")?.value || localStorage.getItem(SUPABASE_STORAGE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY || "").trim()
+    };
+  }
+
+  async function sbConnect(){
+    const cfg = sbGetConfig();
+    if(!cfg.url || !cfg.anon){ alert("Pegá SUPABASE_URL y SUPABASE_ANON_KEY."); return; }
+    sbSaveConfig(cfg.url, cfg.anon);
+    try {
+      sbClient = window.supabase.createClient(cfg.url, cfg.anon);
+      sbReady = true;
+      sbSetStatus("Conectado");
+    } catch(e){
+      console.error(e);
+      sbClient = null; sbReady = false;
+      sbSetStatus("Error");
+      alert("Error al conectar Supabase: " + (e?.message || e));
+    }
+  }
+
+  async function sbTest(){
+    if(!sbReady || !sbClient) await sbConnect();
+    if(!sbClient) return;
+    try {
+      const { error } = await sbClient.from("cash_counts").select("id").limit(1);
+      if(error) throw error;
+      alert("✅ Conexión OK con Supabase (cash_counts).");
+    } catch(e){
+      console.error(e);
+      alert("❌ No pude conectar / consultar cash_counts. Revisá URL/KEY y políticas RLS.\n\nDetalle: " + (e?.message || e));
+    }
+  }
+
+  function computeTotalFromClose(close){
+    // close: nuestro formato interno
+    return countedTotal(close);
+  }
+
+  function closeToCashCountsRow(close){
+    // Adaptamos a tu esquema actual: cash_counts
+    const total = computeTotalFromClose(close);
+    const businessName = (close.label || "").trim() || "Caja";
+    return {
+      id: Number(new Date(close.date + "T00:00:00").getTime()), // ID estable por fecha (podés cambiarlo si querés varios cierres por día)
+      business_name: businessName,
+      count_date: close.date,
+      timestamp: new Date().toISOString(),
+      total: total,
+      counts: close.cash, // guardamos billetes/monedas acá (jsonb)
+      extra_amounts: close.extras,
+      general_count: {
+        banks: close.accounts.banks || 0,
+        cards: close.accounts.cards || 0,
+        wallets: close.accounts.wallets || 0,
+        creditReceivable: close.accounts.creditReceivable || 0,
+        expected: Number(close.expected)||0,
+        variance_note: close.varianceNote || "",
+        variance: (total - (Number(close.expected)||0))
+      }
+    };
+  }
+
+  function cashCountsRowToClose(row){
+    const close = defaultClose(row.count_date, state.currency);
+    close.date = row.count_date;
+    close.currency = state.currency;
+    close.label = row.business_name || "";
+    close.cash = row.counts || { bills: {}, coins: {} };
+    close.extras = row.extra_amounts || [];
+    close.accounts = {
+      banks: row.general_count?.banks || 0,
+      cards: row.general_count?.cards || 0,
+      wallets: row.general_count?.wallets || 0,
+      creditReceivable: row.general_count?.creditReceivable || 0
+    };
+    close.expected = row.general_count?.expected || 0;
+    close.varianceNote = row.general_count?.variance_note || "";
+    ensureCashKeys(close);
+    return close;
+  }
+
+  async function sbUpsertCurrentClose(){
+    if(!sbReady || !sbClient) await sbConnect();
+    if(!sbClient) return;
+
+    const row = closeToCashCountsRow(state.current);
+    try {
+      const { error } = await sbClient.from("cash_counts").upsert(row, { onConflict: "id" });
+      if(error) throw error;
+      sbSetStatus("Conectado · subido " + state.current.date);
+      alert("Subido a Supabase: " + state.current.date);
+    } catch(e){
+      console.error(e);
+      alert("⚠️ No pude subir a Supabase.\nDetalle: " + (e?.message || e));
+    }
+  }
+
+  async function sbPullCurrentClose(){
+    if(!sbReady || !sbClient) await sbConnect();
+    if(!sbClient) return;
+
+    const d = state.current.date;
+    const id = Number(new Date(d + "T00:00:00").getTime());
+    try {
+      const { data, error } = await sbClient.from("cash_counts").select("*").eq("id", id).maybeSingle();
+      if(error) throw error;
+      if(!data){ alert("No hay cierre en Supabase para: " + d); return; }
+
+      const close = cashCountsRowToClose(data);
+      state.current = deepClone(close);
+      state.currentDate = close.date;
+      saveState();
+      render();
+      sbSetStatus("Conectado · bajado " + d);
+    } catch(e){
+      console.error(e);
+      alert("⚠️ No pude bajar.\nDetalle: " + (e?.message || e));
+    }
+  }
+
+  async function sbPullAllCloses(){
+    if(!sbReady || !sbClient) await sbConnect();
+    if(!sbClient) return;
+
+    try {
+      const { data, error } = await sbClient.from("cash_counts").select("*").order("timestamp", { ascending:false }).limit(500);
+      if(error) throw error;
+
+      for(const row of (data || [])){
+        if(!row.count_date) continue;
+        const close = cashCountsRowToClose(row);
+        state.closes[close.date] = deepClone(close);
+      }
+      saveState();
+      renderClosesTable();
+      sbSetStatus("Conectado · historial actualizado");
+      alert("Historial bajado: " + (data?.length || 0) + " registros.");
+    } catch(e){
+      console.error(e);
+      alert("⚠️ No pude bajar todo.\nDetalle: " + (e?.message || e));
+    }
+  }
+function defaultClose(date, currency){
     return {
       date,
       currency,
