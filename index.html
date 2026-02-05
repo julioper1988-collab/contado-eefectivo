@@ -7,6 +7,7 @@
   <style>
     :root { --bg:#0b0f17; --card:#121a26; --muted:#8aa0b5; --text:#eaf2ff; --line:#223044; --ok:#19c37d; --warn:#ffcc66; --bad:#ff6b6b; }
     *{box-sizing:border-box}
+    .hidden{display:none}
     body{margin:0;background:linear-gradient(180deg,#070a10,#0b0f17);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial}
     header{padding:14px 16px 10px; position:sticky; top:0; background:rgba(11,15,23,.92); backdrop-filter: blur(8px); border-bottom:1px solid rgba(255,255,255,.06); z-index:5;}
     h1{font-size:16px;margin:0 0 6px}
@@ -250,7 +251,7 @@
       <table id="closesTable">
         <thead>
           <tr>
-            <th>Fecha</th>
+            <th>Fecha</th><th>Hora</th>
             <th>Nota</th>
             <th class="right">Contado</th>
             <th class="right">Esperado</th>
@@ -270,7 +271,9 @@
     <h2>Supabase (sincronización con tu proyecto)</h2>
     <div class="note">Pegá tu <b>URL</b> y <b>Anon Key</b>. Usa tu tabla <b>cash_counts</b> (como tu proyecto actual). No requiere login; guarda/lee con tu anon key y tus políticas actuales.</div>
 
-    <div class="row">
+    <div class="btnRow" style="margin-top:10px;"><button id="sbToggleCfg">Mostrar configuración</button></div>
+<div id="sbCfgWrap" class="hidden">
+<div class="row">
       <div>
         <label class="small muted">SUPABASE_URL</label>
         <input id="sbUrl" type="text" placeholder="https://xxxx.supabase.co" />
@@ -282,8 +285,9 @@
         <input id="sbAnon" type="password" placeholder="eyJhbGciOi..." />
       </div>
     </div>
-<div class="btnRow">
-      <button class="ok" id="sbConnectBtn">Conectar</button>
+
+</div><div class="btnRow">
+      <button class="ok" id="sbConnectBtn">Reconectar</button>
       <button id="sbTestBtn">Probar conexión</button>
     </div>
 
@@ -296,6 +300,21 @@
     <div class="pill" style="margin-top:10px;">
       <b class="mono">Estado Supabase:</b> <span id="sbStatus" class="mono">Desconectado</span>
     </div>
+    <div class="row" style="margin-top:10px;">
+      <div class="pill" style="flex:1">
+        <b class="mono">Auto Sync:</b>
+        <select id="sbAutoSync">
+          <option value="off" selected>OFF</option>
+          <option value="30">Cada 30s</option>
+          <option value="60">Cada 60s</option>
+          <option value="120">Cada 2 min</option>
+        </select>
+      </div>
+      <div class="pill" style="flex:1">
+        <b class="mono">Último sync:</b> <span id="sbLastSync" class="mono">—</span>
+      </div>
+    </div>
+
 
 
     <h2>Backup</h2>
@@ -333,6 +352,28 @@
 
   function sbSetStatus(msg){ const el = $("sbStatus"); if(el) el.textContent = msg; }
 
+  function sbMarkSync(){
+    const el = $("sbLastSync");
+    if(!el) return;
+    const now = new Date();
+    el.textContent = String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0") + ":" + String(now.getSeconds()).padStart(2,"0");
+  }
+
+  let sbAutoTimer = null;
+  function sbStartAutoSync(){
+    if(sbAutoTimer) clearInterval(sbAutoTimer);
+    sbAutoTimer = null;
+    const sel = $("sbAutoSync");
+    if(!sel) return;
+    const v = sel.value;
+    if(v === "off") return;
+    const ms = Number(v) * 1000;
+    if(!ms || ms < 5000) return;
+    sbAutoTimer = setInterval(async ()=>{
+      await sbPullAllCloses(true);
+    }, ms);
+  }
+
   function sbLoadConfig(){
     // autocompletar defaults si no existen
     if(!localStorage.getItem(SUPABASE_STORAGE_URL_KEY)) localStorage.setItem(SUPABASE_STORAGE_URL_KEY, DEFAULT_SUPABASE_URL);
@@ -365,6 +406,8 @@
       sbClient = window.supabase.createClient(cfg.url, cfg.anon);
       sbReady = true;
       sbSetStatus("Conectado");
+      // Auto: traer historial al conectar
+      try{ await sbPullAllCloses(true); }catch(_){ }
     } catch(e){
       console.error(e);
       sbClient = null; sbReady = false;
@@ -392,18 +435,22 @@
   }
 
   function closeToCashCountsRow(close){
-    // Adaptamos a tu esquema actual: cash_counts
     const total = computeTotalFromClose(close);
     const businessName = (close.label || "").trim() || "Caja";
+
+    // Importante: id único permite varios cierres por día / por negocio
+    const id = Number(close.id || Date.now());
+    const ts = close.timestamp || new Date().toISOString();
+
     return {
-      id: Number(new Date(close.date + "T00:00:00").getTime()), // ID estable por fecha (podés cambiarlo si querés varios cierres por día)
+      id: id,
       business_name: businessName,
       count_date: close.date,
-      timestamp: new Date().toISOString(),
+      timestamp: ts,
       total: total,
-      counts: close.cash, // guardamos billetes/monedas acá (jsonb)
-      extra_amounts: close.extras,
-      general_count: {
+      counts: close.cash,               // jsonb
+      extra_amounts: close.extras,      // jsonb
+      general_count: {                 // jsonb
         banks: close.accounts.banks || 0,
         cards: close.accounts.cards || 0,
         wallets: close.accounts.wallets || 0,
@@ -417,6 +464,8 @@
 
   function cashCountsRowToClose(row){
     const close = defaultClose(row.count_date, state.currency);
+    close.id = row.id;
+    close.timestamp = row.timestamp || new Date().toISOString();
     close.date = row.count_date;
     close.currency = state.currency;
     close.label = row.business_name || "";
@@ -438,12 +487,16 @@
     if(!sbReady || !sbClient) await sbConnect();
     if(!sbClient) return;
 
+    if(!state.current.id) state.current.id = Date.now();
+    state.current.timestamp = new Date().toISOString();
+
     const row = closeToCashCountsRow(state.current);
     try {
       const { error } = await sbClient.from("cash_counts").upsert(row, { onConflict: "id" });
       if(error) throw error;
       sbSetStatus("Conectado · subido " + state.current.date);
       alert("Subido a Supabase: " + state.current.date);
+      sbMarkSync();
     } catch(e){
       console.error(e);
       alert("⚠️ No pude subir a Supabase.\nDetalle: " + (e?.message || e));
@@ -454,26 +507,32 @@
     if(!sbReady || !sbClient) await sbConnect();
     if(!sbClient) return;
 
-    const d = state.current.date;
-    const id = Number(new Date(d + "T00:00:00").getTime());
+    // Baja por ID del cierre actualmente cargado
+    const id = Number(state.current.id || 0);
+    if(!id){
+      alert("Este cierre todavía no tiene ID. Guardalo o subilo primero.");
+      return;
+    }
+
     try {
       const { data, error } = await sbClient.from("cash_counts").select("*").eq("id", id).maybeSingle();
       if(error) throw error;
-      if(!data){ alert("No hay cierre en Supabase para: " + d); return; }
+      if(!data){ alert("No existe en Supabase el cierre con ID: " + id); return; }
 
       const close = cashCountsRowToClose(data);
       state.current = deepClone(close);
       state.currentDate = close.date;
       saveState();
       render();
-      sbSetStatus("Conectado · bajado " + d);
+      sbSetStatus("Conectado · bajado ID " + id);
+      sbMarkSync();
     } catch(e){
       console.error(e);
       alert("⚠️ No pude bajar.\nDetalle: " + (e?.message || e));
     }
   }
 
-  async function sbPullAllCloses(){
+  async function sbPullAllCloses(silent=false){
     if(!sbReady || !sbClient) await sbConnect();
     if(!sbClient) return;
 
@@ -484,12 +543,15 @@
       for(const row of (data || [])){
         if(!row.count_date) continue;
         const close = cashCountsRowToClose(row);
-        state.closes[close.date] = deepClone(close);
+        state.closes[String(close.id)] = deepClone(close);
       }
       saveState();
       renderClosesTable();
+    // Auto: si Supabase está conectado, sube este cierre
+    if(typeof sbUpsertCurrentClose === 'function' && sbReady){ sbUpsertCurrentClose(); }
       sbSetStatus("Conectado · historial actualizado");
-      alert("Historial bajado: " + (data?.length || 0) + " registros.");
+      if(!silent) alert("Historial bajado: " + (data?.length || 0) + " registros.");
+      sbMarkSync();
     } catch(e){
       console.error(e);
       alert("⚠️ No pude bajar todo.\nDetalle: " + (e?.message || e));
@@ -497,6 +559,8 @@
   }
 function defaultClose(date, currency){
     return {
+      id: Date.now(),
+      timestamp: new Date().toISOString(),
       date,
       currency,
       label: "",
@@ -688,8 +752,16 @@ function defaultClose(date, currency){
 
   function setCurrentDate(dateStr){
     state.currentDate = dateStr;
-    const existing = state.closes[dateStr];
-    state.current = existing ? deepClone(existing) : defaultClose(dateStr, state.currency);
+
+    // Buscar el último cierre guardado para esa fecha (si existe)
+    const matches = Object.values(state.closes || {}).filter(c => c && c.date === dateStr);
+    if(matches.length){
+      matches.sort((a,b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+      state.current = deepClone(matches[0]);
+    }else{
+      state.current = defaultClose(dateStr, state.currency);
+    }
+
     state.current.currency = state.currency;
     ensureCashKeys(state.current);
     saveState();
@@ -697,16 +769,20 @@ function defaultClose(date, currency){
   }
 
   function saveClose(){
-    const d = state.current.date;
-    state.closes[d] = deepClone(state.current);
+    // asegurar ID y timestamp (para varios cierres por día / por negocio)
+    if(!state.current.id) state.current.id = Date.now();
+    state.current.timestamp = new Date().toISOString();
+
+    const id = String(state.current.id);
+    state.closes[id] = deepClone(state.current);
     saveState();
     renderClosesTable();
-    alert("Cierre guardado: " + d);
+    alert("Cierre guardado: " + state.current.date + " · " + (state.current.label || "Caja"));
   }
 
   function resetThisDate(){
     const d = state.current.date;
-    state.current = defaultClose(d, state.currency);
+    state.current = defaultClose(d, state.currency); // crea nuevo cierre (nuevo id)
     ensureCashKeys(state.current);
     saveState();
     render();
@@ -725,7 +801,7 @@ function defaultClose(date, currency){
     tbody.innerHTML = "";
 
     const q = ($("searchClose").value || "").trim().toLowerCase();
-    const entries = Object.values(state.closes).sort((a,b)=> (a.date < b.date ? 1 : -1));
+    const entries = Object.values(state.closes || {}).sort((a,b)=> new Date(b.timestamp||0) - new Date(a.timestamp||0));
 
     const filtered = entries.filter(c => {
       if(!q) return true;
@@ -740,6 +816,12 @@ function defaultClose(date, currency){
       const tdF = document.createElement("td");
       tdF.innerHTML = `<span class="mono">${c.date}</span>`;
       tr.appendChild(tdF);
+
+      const tdH = document.createElement("td");
+      tdH.className = "mono";
+      const t = c.timestamp ? new Date(c.timestamp) : null;
+      tdH.textContent = t ? (String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0')) : "";
+      tr.appendChild(tdH);
 
       const tdL = document.createElement("td");
       tdL.textContent = (c.label || "") + (c.varianceNote ? " · " + c.varianceNote : "");
@@ -799,7 +881,7 @@ function defaultClose(date, currency){
       btnDel.className = "danger";
       btnDel.onclick = () => {
         if(confirm("¿Borrar cierre del " + c.date + " del historial?")){
-          delete state.closes[c.date];
+          delete state.closes[String(c.id)];
           saveState();
           renderClosesTable();
         }
@@ -923,6 +1005,32 @@ function defaultClose(date, currency){
     if(f) importJSON(f);
     e.target.value = "";
   });
+
+  // === Supabase UI hooks ===
+  if($("sbConnectBtn")){
+    sbLoadConfig();
+
+    // Autoconectar si ya están guardadas URL/KEY
+    sbConnect().then(()=>{});
+
+    $("sbConnectBtn").addEventListener("click", sbConnect);
+    if($("sbTestBtn")) $("sbTestBtn").addEventListener("click", sbTest);
+
+    $("sbPushBtn").addEventListener("click", sbUpsertCurrentClose);
+    $("sbPullBtn").addEventListener("click", sbPullCurrentClose);
+    $("sbPullAllBtn").addEventListener("click", ()=>sbPullAllCloses(false));
+
+    const sel = $("sbAutoSync");
+    if(sel){
+      sel.value = localStorage.getItem("sb_autosync_v1") || "30";
+      sel.addEventListener("change", ()=>{
+        localStorage.setItem("sb_autosync_v1", sel.value);
+        sbStartAutoSync();
+      });
+      sbStartAutoSync();
+    }
+  }
+
 
   render();
 })();
