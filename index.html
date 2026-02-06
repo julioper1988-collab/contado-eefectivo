@@ -380,11 +380,21 @@
     showSync("loading", "Guardando...");
 
     try {
-      const { data, error } = await sb
+      // Check if record exists
+      const { data: existing } = await sb
         .from(TABLE)
-        .upsert(rec, { onConflict: "record_id" });
+        .select("record_id")
+        .eq("record_id", rec.record_id)
+        .maybeSingle();
 
-      if(error) throw error;
+      let result;
+      if(existing){
+        result = await sb.from(TABLE).update(rec).eq("record_id", rec.record_id);
+      } else {
+        result = await sb.from(TABLE).insert(rec);
+      }
+
+      if(result.error) throw result.error;
       showSync("ok", "✓ Guardado: " + rec.fecha + " · " + rec.negocio + " · Gs. " + fmt(rec.total));
       clearForm();
       await renderHistory();
