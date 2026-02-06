@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Control de Caja (Supabase)</title>
+  <title>Control de Caja</title>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial,sans-serif;background:#0b1220;color:#eaf2ff}
@@ -12,7 +12,7 @@
     h1{margin:0 0 8px 0;font-size:22px}
     .muted{opacity:.75}
     label{display:block;font-size:12px;opacity:.8;margin:10px 0 6px}
-    input,select,button,textarea{width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0a111c;color:#eaf2ff;outline:none}
+    input,select,button,textarea{width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0a111c;color:#eaf2ff;outline:none;font-size:14px}
     textarea{min-height:80px;resize:vertical}
     .row{display:flex;gap:10px;flex-wrap:wrap}
     .row > *{flex:1;min-width:210px}
@@ -23,23 +23,29 @@
     .pill{display:inline-flex;gap:8px;align-items:center;padding:7px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:#0a111c}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
     .btnRow{display:flex;gap:10px;flex-wrap:wrap}
-    .btnRow button{width:auto;flex:1;min-width:180px;cursor:pointer}
+    .btnRow button{width:auto;flex:1;min-width:140px;cursor:pointer}
     .primary{background:#1c7ed6;border-color:rgba(255,255,255,.18)}
     .danger{background:#c92a2a;border-color:rgba(255,255,255,.18)}
     .warn{background:#d9480f;border-color:rgba(255,255,255,.18)}
+    .success{background:#2b8a3e;border-color:rgba(255,255,255,.18)}
     table{width:100%;border-collapse:collapse}
     th,td{padding:10px;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px}
     th{text-align:left;opacity:.8}
     .right{text-align:right}
+    .sync-status{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:12px;margin-top:8px}
+    .sync-ok{background:rgba(43,138,62,.2);border:1px solid rgba(43,138,62,.4);color:#69db7c}
+    .sync-err{background:rgba(201,42,42,.2);border:1px solid rgba(201,42,42,.4);color:#ff8787}
+    .sync-loading{background:rgba(28,126,214,.2);border:1px solid rgba(28,126,214,.4);color:#74c0fc}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#74c0fc;border-radius:50%;animation:spin .6s linear infinite}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
       <h1>Control de Caja</h1>
-      <div class="pill" style="margin-top:10px"><b class="mono">Versión:</b> <span class="mono">v2.0.0-20260206131445</span></div>
-      <div class="muted" style="margin-top:8px">Contador de billetes y monedas + totales. Historial local + sincronización con Supabase (opcional).</div>
-      <div class="row" style="margin-top:10px">
+      <div class="muted">Contador de billetes y monedas + totales. Sincronizado con Supabase ☁️</div>
+      <div class="row">
         <div>
           <label>Negocio / Caja</label>
           <input id="biz" placeholder="Ej: Bodega, Asaditos, Conteo general" />
@@ -53,46 +59,7 @@
         <div class="pill"><b class="mono">Efectivo:</b> <span id="cashTotal" class="mono">0</span></div>
         <div class="pill"><b class="mono">Total general:</b> <span id="grandTotal" class="mono">0</span></div>
       </div>
-    </div>
-
-    <div class="card">
-      <h2 style="margin:0 0 10px 0;font-size:18px">Supabase (sincronización entre dispositivos)</h2>
-      <div class="muted">
-        Requiere una tabla llamada <b>cash_counts</b> con columnas: business_name (text), count_date (date), timestamp (timestamptz), total (numeric/int), counts (jsonb), extra_amounts (jsonb), notes (text).
-        <br/>Para evitar duplicados: un índice único en (business_name, count_date).
-      </div>
-      <div class="row" style="margin-top:10px">
-        <div>
-          <label>Supabase URL</label>
-          <input id="sbUrl" placeholder="https://xxxxx.supabase.co" />
-        </div>
-        <div>
-          <label>Anon key</label>
-          <input id="sbAnon" placeholder="eyJhbGciOi..." />
-        </div>
-      </div>
-      <div class="btnRow" style="margin-top:10px">
-        <button class="primary" id="sbConnectBtn">Conectar</button>
-        <button id="sbTestBtn">Probar conexión</button>
-        <button class="warn" id="sbPullBtn">Bajar (historial)</button>
-        <button class="primary" id="sbPushBtn">Subir (este cierre)</button>
-        <button class="danger" id="sbDeleteBtn">Borrar (este cierre en Supabase)</button>
-      </div>
-      <div class="row" style="margin-top:10px">
-        <div class="pill"><b class="mono">Estado:</b> <span id="sbStatus" class="mono">Desconectado</span></div>
-        <div>
-          <label>Auto sync</label>
-          <select id="sbAuto">
-            <option value="off">OFF</option>
-            <option value="15">Cada 15s</option>
-            <option value="30" selected>Cada 30s</option>
-            <option value="60">Cada 60s</option>
-          </select>
-        </div>
-        <div class="pill"><b class="mono">Último sync:</b> <span id="sbLast" class="mono">—</span></div>
-      </div>
-      <label style="margin-top:10px">Log</label>
-      <textarea id="sbLog" readonly></textarea>
+      <div id="syncStatus"></div>
     </div>
 
     <div class="card">
@@ -127,15 +94,17 @@
 
     <div class="card">
       <div class="btnRow">
-        <button class="primary" id="saveBtn">Guardar cierre (local)</button>
-        <button class="warn" id="loadBtn">Cargar (fecha + negocio)</button>
-        <button class="danger" id="clearBtn">Borrar local (este cierre)</button>
+        <button class="primary" id="saveBtn">☁️ Guardar cierre</button>
+        <button class="warn" id="loadBtn">📥 Cargar (fecha + negocio)</button>
+        <button class="danger" id="clearBtn">🗑️ Borrar cierre</button>
       </div>
-      <div class="muted" style="margin-top:10px">Tip: “Subir (este cierre)” manda a Supabase; “Bajar (historial)” trae a este dispositivo y actualiza el historial local.</div>
     </div>
 
     <div class="card">
-      <h2 style="margin:0 0 10px 0;font-size:18px">Historial local</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0;font-size:18px">Historial</h2>
+        <button class="success" id="refreshBtn" style="width:auto;padding:8px 16px;font-size:13px">🔄 Actualizar</button>
+      </div>
       <table>
         <thead>
           <tr>
@@ -150,32 +119,31 @@
     </div>
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-  // === Config ===
+  // ── Supabase config ──
+  const SUPABASE_URL = "https://gqgzluwptmgvzdewjusp.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_Gic4Jhw3keO6MyZtKV2nZA_jjXYiCnJ";
+
+  let sb;
+  try {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  } catch(e) {
+    console.error("Supabase init error:", e);
+  }
+
+  const TABLE = "caja_cierres";
+
+  // ── DOM helpers ──
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => (Number(n||0)).toLocaleString("es-PY");
+
   const BILLS = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 100];
   const COINS = [1000, 500, 100, 50];
 
-  const $ = (id) => document.getElementById(id);
-  const fmt = (n) => (Number(n||0)).toLocaleString("es-PY");
-  const stateKey = "caja_local_v2";
-  const sbCfgKey = "sb_cfg_v2";
-  const sbAutoKey = "sb_auto_v2";
-
   function todayISO(){
     const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth()+1).padStart(2,"0");
-    const day = String(d.getDate()).padStart(2,"0");
-    return y + "-" + m + "-" + day;
-  }
-
-  function readStore(){
-    const raw = localStorage.getItem(stateKey);
-    return raw ? JSON.parse(raw) : { items: [] };
-  }
-  function writeStore(store){
-    localStorage.setItem(stateKey, JSON.stringify(store));
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
   }
 
   function keyOf(date, biz){
@@ -188,6 +156,16 @@
     return Number.isFinite(n) ? n : 0;
   }
 
+  // ── Sync status indicator ──
+  function showSync(type, msg){
+    const el = $("syncStatus");
+    if(type === "ok")      el.innerHTML = '<div class="sync-status sync-ok">✓ ' + msg + '</div>';
+    else if(type === "err") el.innerHTML = '<div class="sync-status sync-err">✗ ' + msg + '</div>';
+    else if(type === "loading") el.innerHTML = '<div class="sync-status sync-loading"><span class="spinner"></span> ' + msg + '</div>';
+    else el.innerHTML = '';
+  }
+
+  // ── Grid building ──
   function buildGrid(containerId, denoms, prefix){
     const grid = $(containerId);
     grid.innerHTML = "";
@@ -256,273 +234,185 @@
     $("grandTotal").textContent = fmt(cash + banks + cards + others);
   }
 
+  // ── Record helpers ──
   function currentRecord(){
     const biz = $("biz").value.trim() || "Caja";
     const date = $("date").value || todayISO();
-
     const bills = getCounts("b", BILLS);
     const coins = getCounts("m", COINS);
-
     const banks = numVal($("banks").value);
     const cards = numVal($("cards").value);
     const others = numVal($("others").value);
     const notes = $("notes").value || "";
-
     const cash = sumCounts(BILLS, bills) + sumCounts(COINS, coins);
     const total = cash + banks + cards + others;
 
     return {
-      id: keyOf(date, biz),
-      date: date,
-      biz: biz,
+      record_id: keyOf(date, biz),
+      fecha: date,
+      negocio: biz,
       bills: bills,
       coins: coins,
-      banks: banks,
-      cards: cards,
-      others: others,
-      notes: notes,
-      cash: cash,
+      bancos: banks,
+      tarjetas: cards,
+      otros: others,
+      notas: notes,
+      efectivo: cash,
       total: total,
-      updatedAt: new Date().toISOString()
+      updated_at: new Date().toISOString()
     };
   }
 
   function loadRecord(rec){
-    $("biz").value = rec.biz || "";
-    $("date").value = rec.date || todayISO();
+    $("biz").value = rec.negocio || rec.biz || "";
+    $("date").value = rec.fecha || rec.date || todayISO();
     setCounts("b", BILLS, rec.bills || {});
     setCounts("m", COINS, rec.coins || {});
-    $("banks").value = rec.banks ? String(rec.banks) : "";
-    $("cards").value = rec.cards ? String(rec.cards) : "";
-    $("others").value = rec.others ? String(rec.others) : "";
-    $("notes").value = rec.notes || "";
+    $("banks").value = rec.bancos || rec.banks ? String(rec.bancos || rec.banks) : "";
+    $("cards").value = rec.tarjetas || rec.cards ? String(rec.tarjetas || rec.cards) : "";
+    $("others").value = rec.otros || rec.others ? String(rec.otros || rec.others) : "";
+    $("notes").value = rec.notas || rec.notes || "";
     updateTotals();
   }
 
-  function renderHistory(){
-    const store = readStore();
+  // ── Supabase operations ──
+  async function saveToCloud(){
+    const rec = currentRecord();
+    showSync("loading", "Guardando...");
+
+    try {
+      const { data, error } = await sb
+        .from(TABLE)
+        .upsert(rec, { onConflict: "record_id" });
+
+      if(error) throw error;
+      showSync("ok", "Guardado: " + rec.fecha + " · " + rec.negocio);
+      await renderHistory();
+    } catch(e){
+      console.error("Save error:", e);
+      showSync("err", "Error al guardar: " + (e.message || e));
+    }
+  }
+
+  async function loadFromCloud(){
+    const biz = $("biz").value.trim() || "Caja";
+    const date = $("date").value || todayISO();
+    const id = keyOf(date, biz);
+
+    showSync("loading", "Cargando...");
+
+    try {
+      const { data, error } = await sb
+        .from(TABLE)
+        .select("*")
+        .eq("record_id", id)
+        .maybeSingle();
+
+      if(error) throw error;
+      if(!data){
+        showSync("err", "No existe ese cierre en la nube.");
+        return;
+      }
+      loadRecord(data);
+      showSync("ok", "Cargado: " + date + " · " + biz);
+    } catch(e){
+      console.error("Load error:", e);
+      showSync("err", "Error al cargar: " + (e.message || e));
+    }
+  }
+
+  async function deleteFromCloud(){
+    const biz = $("biz").value.trim() || "Caja";
+    const date = $("date").value || todayISO();
+    const id = keyOf(date, biz);
+
+    if(!confirm("¿Borrar cierre " + date + " · " + biz + " de la nube?")) return;
+
+    showSync("loading", "Borrando...");
+
+    try {
+      const { error } = await sb
+        .from(TABLE)
+        .delete()
+        .eq("record_id", id);
+
+      if(error) throw error;
+      showSync("ok", "Borrado: " + date + " · " + biz);
+      await renderHistory();
+    } catch(e){
+      console.error("Delete error:", e);
+      showSync("err", "Error al borrar: " + (e.message || e));
+    }
+  }
+
+  async function renderHistory(){
     const body = $("histBody");
-    body.innerHTML = "";
 
-    const items = (store.items || []).slice().sort((a,b) => (b.date||"").localeCompare(a.date||""));
-    items.forEach(rec => {
-      const tr = document.createElement("tr");
-      tr.innerHTML =
-        "<td>" + (rec.date || "") + "</td>" +
-        "<td>" + (rec.biz || "") + "</td>" +
-        '<td class="right mono">' + fmt(rec.total || 0) + "</td>" +
-        '<td class="right">' +
-          '<button data-act="open" data-id="' + rec.id + '" style="padding:8px 10px;border-radius:10px">Abrir</button>' +
-          '<button data-act="del" data-id="' + rec.id + '" style="padding:8px 10px;border-radius:10px;margin-left:6px;background:#c92a2a;border-color:rgba(255,255,255,.18)">Borrar</button>' +
-        "</td>";
-      body.appendChild(tr);
-    });
+    try {
+      const { data, error } = await sb
+        .from(TABLE)
+        .select("record_id, fecha, negocio, total")
+        .order("fecha", { ascending: false })
+        .limit(50);
 
-    body.querySelectorAll("button").forEach(btn => {
-      btn.addEventListener("click", () => {
-        const id = btn.getAttribute("data-id");
-        const act = btn.getAttribute("data-act");
-        const store2 = readStore();
-        const idx = (store2.items||[]).findIndex(x => x.id === id);
-        if(idx < 0) return;
+      if(error) throw error;
 
-        if(act === "open") loadRecord(store2.items[idx]);
-        else if(act === "del"){ store2.items.splice(idx,1); writeStore(store2); renderHistory(); }
+      body.innerHTML = "";
+      (data || []).forEach(rec => {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td>" + (rec.fecha || "") + "</td>" +
+          "<td>" + (rec.negocio || "") + "</td>" +
+          '<td class="right mono">' + fmt(rec.total || 0) + "</td>" +
+          '<td class="right">' +
+            '<button data-act="open" data-id="' + rec.record_id + '" style="padding:8px 10px;border-radius:10px;cursor:pointer">Abrir</button> ' +
+            '<button data-act="del" data-id="' + rec.record_id + '" style="padding:8px 10px;border-radius:10px;cursor:pointer;background:#c92a2a;border-color:rgba(255,255,255,.18)">Borrar</button>' +
+          "</td>";
+        body.appendChild(tr);
       });
-    });
+
+      body.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-id");
+          const act = btn.getAttribute("data-act");
+
+          if(act === "open"){
+            showSync("loading", "Cargando...");
+            try {
+              const { data: rec, error } = await sb
+                .from(TABLE)
+                .select("*")
+                .eq("record_id", id)
+                .maybeSingle();
+              if(error) throw error;
+              if(rec){
+                loadRecord(rec);
+                showSync("ok", "Cargado: " + rec.fecha + " · " + rec.negocio);
+              }
+            } catch(e){
+              showSync("err", "Error: " + (e.message || e));
+            }
+          } else if(act === "del"){
+            if(!confirm("¿Borrar este cierre de la nube?")) return;
+            showSync("loading", "Borrando...");
+            try {
+              const { error } = await sb.from(TABLE).delete().eq("record_id", id);
+              if(error) throw error;
+              showSync("ok", "Borrado");
+              await renderHistory();
+            } catch(e){
+              showSync("err", "Error: " + (e.message || e));
+            }
+          }
+        });
+      });
+    } catch(e){
+      console.error("History error:", e);
+      body.innerHTML = '<tr><td colspan="4" style="color:#ff8787">Error al cargar historial: ' + (e.message || e) + '</td></tr>';
+    }
   }
 
-  function saveCurrentLocal(){
-    const rec = currentRecord();
-    const store = readStore();
-    const idx = (store.items||[]).findIndex(x => x.id === rec.id);
-    if(idx >= 0) store.items[idx] = rec;
-    else store.items.push(rec);
-    writeStore(store);
-    renderHistory();
-    alert("Guardado local: " + rec.date + " · " + rec.biz);
-  }
-
-  function loadByKey(){
-    const biz = $("biz").value.trim() || "Caja";
-    const date = $("date").value || todayISO();
-    const id = keyOf(date, biz);
-    const store = readStore();
-    const rec = (store.items||[]).find(x => x.id === id);
-    if(!rec){ alert("No existe ese cierre en este dispositivo."); return; }
-    loadRecord(rec);
-  }
-
-  function clearCurrentLocal(){
-    const biz = $("biz").value.trim() || "Caja";
-    const date = $("date").value || todayISO();
-    const id = keyOf(date, biz);
-    const store = readStore();
-    const idx = (store.items||[]).findIndex(x => x.id === id);
-    if(idx >= 0){ store.items.splice(idx,1); writeStore(store); renderHistory(); }
-  }
-
-  // === Supabase ===
-  let sbClient = null;
-  let sbTimer = null;
-
-  function sbLog(msg){
-    const box = $("sbLog");
-    const t = new Date().toLocaleTimeString("es-PY");
-    box.value = "[" + t + "] " + msg + "\n" + box.value;
-  }
-  function sbSetStatus(s){ $("sbStatus").textContent = s; }
-  function sbSetLast(){ $("sbLast").textContent = new Date().toLocaleTimeString("es-PY"); }
-
-  function sbSaveCfg(){
-    const cfg = { url: $("sbUrl").value.trim(), anon: $("sbAnon").value.trim() };
-    localStorage.setItem(sbCfgKey, JSON.stringify(cfg));
-  }
-  function sbLoadCfg(){
-    const raw = localStorage.getItem(sbCfgKey);
-    if(!raw) return;
-    const cfg = JSON.parse(raw);
-    $("sbUrl").value = cfg.url || "";
-    $("sbAnon").value = cfg.anon || "";
-  }
-
-  async function sbConnect(){
-    const url = $("sbUrl").value.trim();
-    const anon = $("sbAnon").value.trim();
-    if(!url || !anon){ sbSetStatus("Desconectado"); sbLog("Falta URL o anon key."); return false; }
-    sbSaveCfg();
-    sbClient = window.supabase.createClient(url, anon);
-    sbSetStatus("Conectado");
-    sbLog("Conectado.");
-    return true;
-  }
-
-  async function sbTest(){
-    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
-    sbLog("Probando SELECT…");
-    const { error } = await sbClient.from("cash_counts").select("id").limit(1);
-    if(error){ sbSetStatus("Error"); sbLog("ERROR: " + error.message); alert("Error Supabase: " + error.message); return; }
-    sbSetStatus("OK");
-    sbLog("OK.");
-  }
-
-  function recordToRow(rec){
-    const counts = { bills: rec.bills || {}, coins: rec.coins || {} };
-    const extra_amounts = [
-      { detail: "Bancos", amount: Number(rec.banks||0) },
-      { detail: "Tarjetas/POS", amount: Number(rec.cards||0) },
-      { detail: "Otros", amount: Number(rec.others||0) },
-    ].filter(x => x.amount !== 0 || (x.detail||"").trim() !== "");
-    return {
-      business_name: rec.biz || "",
-      count_date: rec.date,
-      timestamp: new Date().toISOString(),
-      total: Number(rec.total||0),
-      counts: counts,
-      extra_amounts: extra_amounts,
-      notes: rec.notes || ""
-    };
-  }
-
-  function rowToRecord(row){
-    const bills = (row.counts && row.counts.bills) ? row.counts.bills : {};
-    const coins = (row.counts && row.counts.coins) ? row.counts.coins : {};
-
-    let banks=0, cards=0, others=0;
-    const extras = Array.isArray(row.extra_amounts) ? row.extra_amounts : [];
-    extras.forEach(x => {
-      const d = (x.detail||"").toLowerCase();
-      const a = Number(x.amount||0);
-      if(d.includes("banco")) banks += a;
-      else if(d.includes("tarjeta") || d.includes("pos") || d.includes("bancard")) cards += a;
-      else if(d.includes("otro")) others += a;
-    });
-
-    return {
-      id: keyOf(row.count_date, row.business_name || ""),
-      date: row.count_date,
-      biz: row.business_name || "",
-      bills: bills,
-      coins: coins,
-      banks: banks,
-      cards: cards,
-      others: others,
-      notes: row.notes || "",
-      total: Number(row.total||0),
-      updatedAt: row.timestamp || ""
-    };
-  }
-
-  async function sbPushCurrent(){
-    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
-    const rec = currentRecord();
-    if(!rec.biz || !rec.date){ alert("Completá negocio y fecha."); return; }
-
-    const row = recordToRow(rec);
-    sbLog("Subiendo (upsert) " + rec.date + " · " + rec.biz + "…");
-
-    const { error } = await sbClient.from("cash_counts").upsert(row, { onConflict: "business_name,count_date" });
-    if(error){ sbLog("ERROR subir: " + error.message); alert("No pude subir: " + error.message); return; }
-
-    sbLog("OK subido.");
-    sbSetLast();
-    await sbPullAll(true);
-  }
-
-  async function sbPullAll(silent){
-    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
-    sbLog("Bajando historial…");
-    const { data, error } = await sbClient.from("cash_counts").select("*").order("timestamp", { ascending:false }).limit(2000);
-    if(error){ sbLog("ERROR bajar: " + error.message); if(!silent) alert("No pude bajar: " + error.message); return; }
-
-    const store = readStore();
-    let applied = 0;
-    (data || []).forEach(row => {
-      // ignorar fantasma 0
-      const total = Number(row.total||0);
-      const name = (row.business_name||"").trim();
-      const hasCounts = row.counts && (Object.keys((row.counts.bills||{})).length || Object.keys((row.counts.coins||{})).length);
-      const hasExtras = Array.isArray(row.extra_amounts) && row.extra_amounts.length;
-      if(total === 0 && !name && !hasCounts && !hasExtras) return;
-
-      const rec = rowToRecord(row);
-      const idx = (store.items||[]).findIndex(x => x.id === rec.id);
-      if(idx >= 0) store.items[idx] = rec;
-      else store.items.push(rec);
-      applied++;
-    });
-    writeStore(store);
-    renderHistory();
-    sbSetLast();
-    sbLog("OK. Recibidos: " + (data||[]).length + " · Aplicados: " + applied);
-    if(!silent) alert("Historial actualizado.");
-  }
-
-  async function sbDeleteCurrent(){
-    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
-    const biz = $("biz").value.trim();
-    const date = $("date").value;
-    if(!biz || !date){ alert("Completá negocio y fecha."); return; }
-
-    sbLog("Borrando en Supabase: " + date + " · " + biz + "…");
-    const { error } = await sbClient.from("cash_counts").delete().eq("business_name", biz).eq("count_date", date);
-    if(error){ sbLog("ERROR borrar: " + error.message); alert("No pude borrar: " + error.message); return; }
-
-    sbLog("OK borrado.");
-    sbSetLast();
-    await sbPullAll(true);
-  }
-
-  function sbSetupAuto(){
-    if(sbTimer){ clearInterval(sbTimer); sbTimer = null; }
-    const v = $("sbAuto").value;
-    localStorage.setItem(sbAutoKey, v);
-    if(v === "off") return;
-    const ms = Number(v) * 1000;
-    sbTimer = setInterval(()=>sbPullAll(true), ms);
-  }
-
-  // === Boot ===
+  // ── Init ──
   $("date").value = todayISO();
   buildGrid("billsGrid", BILLS, "b");
   buildGrid("coinsGrid", COINS, "m");
@@ -535,29 +425,13 @@
     });
   });
 
-  $("saveBtn").addEventListener("click", saveCurrentLocal);
-  $("loadBtn").addEventListener("click", loadByKey);
-  $("clearBtn").addEventListener("click", clearCurrentLocal);
-
-  // Supabase boot
-  sbLoadCfg();
-  const autoSaved = localStorage.getItem(sbAutoKey);
-  if(autoSaved) $("sbAuto").value = autoSaved;
-
-  $("sbConnectBtn").addEventListener("click", async ()=>{ await sbConnect(); sbSetupAuto(); });
-  $("sbTestBtn").addEventListener("click", sbTest);
-  $("sbPullBtn").addEventListener("click", ()=>sbPullAll(false));
-  $("sbPushBtn").addEventListener("click", sbPushCurrent);
-  $("sbDeleteBtn").addEventListener("click", sbDeleteCurrent);
-  $("sbAuto").addEventListener("change", sbSetupAuto);
+  $("saveBtn").addEventListener("click", saveToCloud);
+  $("loadBtn").addEventListener("click", loadFromCloud);
+  $("clearBtn").addEventListener("click", deleteFromCloud);
+  $("refreshBtn").addEventListener("click", () => renderHistory());
 
   updateTotals();
   renderHistory();
-
-  // conectar automático si hay config
-  if(($("sbUrl").value.trim() && $("sbAnon").value.trim())){
-    sbConnect().then(()=>sbSetupAuto());
-  }
 </script>
 </body>
 </html>
