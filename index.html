@@ -240,7 +240,6 @@
     <div class="hr"></div>
 
     <h2>Historial de cierres</h2>
-    <div class="note">🗑️ Borrado global activo: al borrar, se elimina también en Supabase (no vuelve a aparecer).</div>
     <div class="note">Cada cierre guarda: contado, esperado, descuadre, nota, y todo el detalle del conteo.</div>
 
     <div style="margin-top:10px;">
@@ -485,8 +484,8 @@
       const extras = row.extra_amounts || [];
       const counts = row.counts || {};
 
-      const bills = counts.bills || {};
-      const coins = counts.coins || {};
+      const bills = (counts.bills || {});
+      const coins = (counts.coins || {});
       const hasBills = Object.keys(bills).some(k => Number(bills[k] || 0) !== 0);
       const hasCoins = Object.keys(coins).some(k => Number(coins[k] || 0) !== 0);
 
@@ -505,19 +504,6 @@
 
       return (total === 0 && !name && !hasAnyCash && !hasExtras && !hasGen);
     } catch (e) {
-      console.warn("isPhantomRow error:", e);
-      return false;
-    }
-  };
-      const hasBills = !!counts.bills && Object.keys(counts.bills || {}).some(k => Number(counts.bills[k]||0) !== 0);
-      const hasCoins = !!counts.coins && Object.keys(counts.coins || {}).some(k => Number(counts.coins[k]||0) !== 0);
-      const hasFlat = (!counts.bills && !counts.coins) && Object.keys(counts || {}).some(k => Number(counts[k]||0) !== 0);
-      const hasAnyCash = hasBills || hasCoins || hasFlat;
-      const hasExtras = Array.isArray(extras) && extras.some(x => Number(x?.amount || 0) !== 0 || (x?.detail||"").trim() !== "");
-      const gen = row.general_count || {};
-      const hasGen = Number(gen.banks||0)||Number(gen.cards||0)||Number(gen.wallets||0)||Number(gen.creditReceivable||0)||Number(gen.expected||0);
-      return (total === 0 && !name && !hasAnyCash && !hasExtras && !hasGen);
-    }catch(_){
       return false;
     }
   }
@@ -572,6 +558,8 @@
     if(!sbReady || !sbClient) await sbConnect();
     if(!sbClient) return;
 
+    if(!confirm("Esto borra TODO en Supabase (cash_counts). ¿Seguro?")) return;
+
     try {
       const { data, error } = await sbClient.from("cash_counts").select("id").limit(2000);
       if(error) throw error;
@@ -597,28 +585,6 @@
 
       alert("Borrado total en Supabase OK. Registros: " + ids.length);
     } catch (e) {
-      console.error(e);
-      alert("No pude borrar TODO en Supabase.
-Detalle: " + (e?.message || e));
-    }
-  }
-
-      // Borrar en lotes (evita URL muy larga)
-      const batchSize = 200;
-      for(let i=0;i<ids.length;i+=batchSize){
-        const chunk = ids.slice(i, i+batchSize);
-        const { error: delErr } = await sbClient.from("cash_counts").delete().in("id", chunk);
-        if(delErr) throw delErr;
-      }
-
-      // Limpieza local
-      state.closes = {};
-      state.current = defaultClose(state.currentDate || todayISO(), state.currency);
-      ensureCashKeys(state.current);
-      saveState();
-      render();
-      alert("Borrado total en Supabase OK. Registros: " + ids.length);
-    }catch(e){
       console.error(e);
       alert("No pude borrar TODO en Supabase.\nDetalle: " + (e?.message || e));
     }
@@ -664,15 +630,32 @@ async function sbPullCurrentClose(){
     if(!sbClient) return;
 
     try {
-      const { data, error } = await sbClient.from("cash_counts").select("*").order("timestamp", { ascending:false }).limit(500);
+      const { data, error } = await sbClient.from("cash_counts").select("*").order("timestamp", { ascending:false }).limit(2000);
       if(error) throw error;
 
+      let ok = 0, skipped = 0, bad = 0;
       for(const row of (data || [])){
-      if(isPhantomRow(row)) continue;
-        if(!row.count_date) continue;
-        const close = cashCountsRowToClose(row);
-        state.closes[String(close.id)] = deepClone(close);
+        if(isPhantomRow(row)){ skipped++; continue; }
+        try{
+          if(!row.count_date) continue;
+          const close = cashCountsRowToClose(row);
+          state.closes[String(close.id)] = deepClone(close);
+          ok++;
+        }catch(eRow){
+          bad++;
+          console.warn("Row parse error", row?.id, eRow);
+        }
       }
+
+      saveState();
+      renderClosesTable();
+
+      if(!silent) alert("Historial bajado: " + ok + " registros. (Saltados: " + skipped + ", Err: " + bad + ")");
+    } catch(e){
+      console.error(e);
+      alert("⚠️ No pude bajar todo.\nDetalle: " + (e?.message || e));
+    }
+  }
       saveState();
       renderClosesTable();
     // Auto: si Supabase está conectado, sube este cierre
@@ -732,6 +715,10 @@ function defaultClose(date, currency){
     for(const d of bills){
       if(close.cash.bills[d] == null) close.cash.bills[d] = 0;
     }
+    for(const d of coins){
+      if(close.cash.coins[d] == null) close.cash.coins[d] = 0;
+    }
+  }
     for(const d of coins){
       if(close.cash.coins[d] == null) close.cash.coins[d] = 0;
     }
@@ -1017,10 +1004,9 @@ function defaultClose(date, currency){
       btnDel.textContent = "Borrar";
       btnDel.className = "danger";
       btnDel.onclick = async () => {
-        // Borrado GLOBAL: primero en Supabase, luego local (sin preguntar)
+        // Borrado GLOBAL (sin preguntar): primero en Supabase, luego local
         const ok = await sbDeleteById(c.id);
-        if(!ok) return; // si falla, no borra local para evitar que reaparezca
-
+        if(!ok) return;
         delete state.closes[String(c.id)];
         saveState();
         renderClosesTable();
