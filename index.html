@@ -240,6 +240,7 @@
     <div class="hr"></div>
 
     <h2>Historial de cierres</h2>
+    <div class="note">🗑️ Borrado global activo: al borrar, se elimina también en Supabase (no vuelve a aparecer).</div>
     <div class="note">Cada cierre guarda: contado, esperado, descuadre, nota, y todo el detalle del conteo.</div>
 
     <div style="margin-top:10px;">
@@ -912,13 +913,9 @@ function defaultClose(date, currency){
       btnDel.textContent = "Borrar";
       btnDel.className = "danger";
       btnDel.onclick = async () => {
-        const msg = "¿Borrar este cierre?\n\nOK = borrar también en Supabase (en todos los dispositivos).\nCancelar = borrar solo local (pero puede volver a aparecer al sincronizar).";
-        const delSupabase = confirm(msg);
-
-        if(delSupabase){
-          const ok = await sbDeleteById(c.id);
-          if(!ok) return; // si falla, no borra local para evitar que reaparezca
-        }
+        // Borrado GLOBAL: primero en Supabase, luego local (sin preguntar)
+        const ok = await sbDeleteById(c.id);
+        if(!ok) return; // si falla, no borra local para evitar que reaparezca
 
         delete state.closes[String(c.id)];
         saveState();
