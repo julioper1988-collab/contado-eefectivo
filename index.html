@@ -95,6 +95,7 @@
     <div class="card">
       <div class="btnRow">
         <button class="primary" id="saveBtn">☁️ Guardar cierre</button>
+        <button class="success" id="newBtn">✨ Nuevo cierre</button>
         <button class="warn" id="loadBtn">📥 Cargar (fecha + negocio)</button>
         <button class="danger" id="clearBtn">🗑️ Borrar cierre</button>
       </div>
@@ -275,9 +276,36 @@
     updateTotals();
   }
 
+  // ── Clear form ──
+  function clearForm(){
+    setCounts("b", BILLS, {});
+    setCounts("m", COINS, {});
+    $("banks").value = "";
+    $("cards").value = "";
+    $("others").value = "";
+    $("notes").value = "";
+    $("biz").value = "";
+    $("date").value = todayISO();
+    updateTotals();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // ── Error message helper ──
+  function errMsg(e){
+    if(!e) return "Error desconocido";
+    if(typeof e === "string") return e;
+    if(e.message) return e.message;
+    if(e.details) return e.details;
+    if(e.hint) return e.hint;
+    try { return JSON.stringify(e); } catch(_){ return "Error desconocido"; }
+  }
+
   // ── Supabase operations ──
   async function saveToCloud(){
     const rec = currentRecord();
+    if(rec.total === 0){
+      if(!confirm("El total es 0. ¿Guardar de todos modos?")) return;
+    }
     showSync("loading", "Guardando...");
 
     try {
@@ -286,11 +314,12 @@
         .upsert(rec, { onConflict: "record_id" });
 
       if(error) throw error;
-      showSync("ok", "Guardado: " + rec.fecha + " · " + rec.negocio);
+      showSync("ok", "✓ Guardado: " + rec.fecha + " · " + rec.negocio + " · Gs. " + fmt(rec.total));
+      clearForm();
       await renderHistory();
     } catch(e){
       console.error("Save error:", e);
-      showSync("err", "Error al guardar: " + (e.message || e));
+      showSync("err", "Error al guardar: " + errMsg(e));
     }
   }
 
@@ -317,7 +346,7 @@
       showSync("ok", "Cargado: " + date + " · " + biz);
     } catch(e){
       console.error("Load error:", e);
-      showSync("err", "Error al cargar: " + (e.message || e));
+      showSync("err", "Error al cargar: " + errMsg(e));
     }
   }
 
@@ -341,7 +370,7 @@
       await renderHistory();
     } catch(e){
       console.error("Delete error:", e);
-      showSync("err", "Error al borrar: " + (e.message || e));
+      showSync("err", "Error al borrar: " + errMsg(e));
     }
   }
 
@@ -390,7 +419,7 @@
                 showSync("ok", "Cargado: " + rec.fecha + " · " + rec.negocio);
               }
             } catch(e){
-              showSync("err", "Error: " + (e.message || e));
+              showSync("err", "Error: " + errMsg(e));
             }
           } else if(act === "del"){
             if(!confirm("¿Borrar este cierre de la nube?")) return;
@@ -401,14 +430,14 @@
               showSync("ok", "Borrado");
               await renderHistory();
             } catch(e){
-              showSync("err", "Error: " + (e.message || e));
+              showSync("err", "Error: " + errMsg(e));
             }
           }
         });
       });
     } catch(e){
       console.error("History error:", e);
-      body.innerHTML = '<tr><td colspan="4" style="color:#ff8787">Error al cargar historial: ' + (e.message || e) + '</td></tr>';
+      body.innerHTML = '<tr><td colspan="4" style="color:#ff8787">Error al cargar historial: ' + errMsg(e) + '</td></tr>';
     }
   }
 
@@ -426,6 +455,7 @@
   });
 
   $("saveBtn").addEventListener("click", saveToCloud);
+  $("newBtn").addEventListener("click", () => { clearForm(); showSync("", ""); });
   $("loadBtn").addEventListener("click", loadFromCloud);
   $("clearBtn").addEventListener("click", deleteFromCloud);
   $("refreshBtn").addEventListener("click", () => renderHistory());
