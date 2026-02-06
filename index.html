@@ -479,12 +479,36 @@
     }
 
   function isPhantomRow(row){
-    // Registros “fantasma” típicos: total=0, sin nombre, sin extras, counts vacío
-    try{
+    try {
       const total = Number(row.total || 0);
       const name = (row.business_name || "").trim();
       const extras = row.extra_amounts || [];
       const counts = row.counts || {};
+
+      const bills = counts.bills || {};
+      const coins = counts.coins || {};
+      const hasBills = Object.keys(bills).some(k => Number(bills[k] || 0) !== 0);
+      const hasCoins = Object.keys(coins).some(k => Number(coins[k] || 0) !== 0);
+
+      const hasFlat = (!counts.bills && !counts.coins) &&
+        Object.keys(counts).some(k => Number(counts[k] || 0) !== 0);
+
+      const hasAnyCash = hasBills || hasCoins || hasFlat;
+
+      const hasExtras = Array.isArray(extras) &&
+        extras.some(x => Number(x?.amount || 0) !== 0 || (x?.detail || "").trim() !== "");
+
+      const gen = row.general_count || {};
+      const hasGen = Number(gen.banks||0) || Number(gen.cards||0) ||
+                     Number(gen.wallets||0) || Number(gen.creditReceivable||0) ||
+                     Number(gen.expected||0);
+
+      return (total === 0 && !name && !hasAnyCash && !hasExtras && !hasGen);
+    } catch (e) {
+      console.warn("isPhantomRow error:", e);
+      return false;
+    }
+  };
       const hasBills = !!counts.bills && Object.keys(counts.bills || {}).some(k => Number(counts.bills[k]||0) !== 0);
       const hasCoins = !!counts.coins && Object.keys(counts.coins || {}).some(k => Number(counts.coins[k]||0) !== 0);
       const hasFlat = (!counts.bills && !counts.coins) && Object.keys(counts || {}).some(k => Number(counts[k]||0) !== 0);
@@ -548,9 +572,7 @@
     if(!sbReady || !sbClient) await sbConnect();
     if(!sbClient) return;
 
-    // WARNING: borrado masivo real en Supabase
-    try{
-      // Traer IDs
+    try {
       const { data, error } = await sbClient.from("cash_counts").select("id").limit(2000);
       if(error) throw error;
 
@@ -559,6 +581,27 @@
         alert("No hay registros para borrar en Supabase.");
         return;
       }
+
+      const batchSize = 200;
+      for(let i=0;i<ids.length;i+=batchSize){
+        const chunk = ids.slice(i, i+batchSize);
+        const { error: delErr } = await sbClient.from("cash_counts").delete().in("id", chunk);
+        if(delErr) throw delErr;
+      }
+
+      state.closes = {};
+      state.current = defaultClose(state.currentDate || todayISO(), state.currency);
+      ensureCashKeys(state.current);
+      saveState();
+      render();
+
+      alert("Borrado total en Supabase OK. Registros: " + ids.length);
+    } catch (e) {
+      console.error(e);
+      alert("No pude borrar TODO en Supabase.
+Detalle: " + (e?.message || e));
+    }
+  }
 
       // Borrar en lotes (evita URL muy larga)
       const batchSize = 200;
