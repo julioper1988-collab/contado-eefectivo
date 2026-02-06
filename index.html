@@ -296,6 +296,7 @@
       <button class="ok" id="sbPushBtn">Subir cierre (fecha actual)</button>
       <button id="sbPullBtn">Bajar cierre (fecha actual)</button>
       <button class="warn" id="sbPullAllBtn">Bajar TODO (historial)</button>
+      <button class="danger" id="sbDeleteAllBtn">Borrar TODO (Supabase)</button>
     </div>
 
     <div class="pill" style="margin-top:10px;">
@@ -476,6 +477,27 @@
       // si guardaste counts como mapa plano, lo mandamos a bills
       close.cash = { bills: close.cash, coins: {} };
     }
+
+  function isPhantomRow(row){
+    // Registros “fantasma” típicos: total=0, sin nombre, sin extras, counts vacío
+    try{
+      const total = Number(row.total || 0);
+      const name = (row.business_name || "").trim();
+      const extras = row.extra_amounts || [];
+      const counts = row.counts || {};
+      const hasBills = !!counts.bills && Object.keys(counts.bills || {}).some(k => Number(counts.bills[k]||0) !== 0);
+      const hasCoins = !!counts.coins && Object.keys(counts.coins || {}).some(k => Number(counts.coins[k]||0) !== 0);
+      const hasFlat = (!counts.bills && !counts.coins) && Object.keys(counts || {}).some(k => Number(counts[k]||0) !== 0);
+      const hasAnyCash = hasBills || hasCoins || hasFlat;
+      const hasExtras = Array.isArray(extras) && extras.some(x => Number(x?.amount || 0) !== 0 || (x?.detail||"").trim() !== "");
+      const gen = row.general_count || {};
+      const hasGen = Number(gen.banks||0)||Number(gen.cards||0)||Number(gen.wallets||0)||Number(gen.creditReceivable||0)||Number(gen.expected||0);
+      return (total === 0 && !name && !hasAnyCash && !hasExtras && !hasGen);
+    }catch(_){
+      return false;
+    }
+  }
+
     if(close.cash && !close.cash.bills) close.cash.bills = {};
     if(close.cash && !close.cash.coins) close.cash.coins = {};
     close.extras = row.extra_amounts || [];
@@ -520,7 +542,45 @@
       const { error } = await sbClient.from("cash_counts").delete().eq("id", Number(id));
       if(error) throw error;
       return true;
+    }
+
+  async function sbDeleteAllSupabase(){
+    if(!sbReady || !sbClient) await sbConnect();
+    if(!sbClient) return;
+
+    // WARNING: borrado masivo real en Supabase
+    try{
+      // Traer IDs
+      const { data, error } = await sbClient.from("cash_counts").select("id").limit(2000);
+      if(error) throw error;
+
+      const ids = (data||[]).map(x => x.id).filter(Boolean);
+      if(!ids.length){
+        alert("No hay registros para borrar en Supabase.");
+        return;
+      }
+
+      // Borrar en lotes (evita URL muy larga)
+      const batchSize = 200;
+      for(let i=0;i<ids.length;i+=batchSize){
+        const chunk = ids.slice(i, i+batchSize);
+        const { error: delErr } = await sbClient.from("cash_counts").delete().in("id", chunk);
+        if(delErr) throw delErr;
+      }
+
+      // Limpieza local
+      state.closes = {};
+      state.current = defaultClose(state.currentDate || todayISO(), state.currency);
+      ensureCashKeys(state.current);
+      saveState();
+      render();
+      alert("Borrado total en Supabase OK. Registros: " + ids.length);
     }catch(e){
+      console.error(e);
+      alert("No pude borrar TODO en Supabase.\nDetalle: " + (e?.message || e));
+    }
+  }
+catch(e){
       console.error(e);
       alert("No pude borrar en Supabase (probable RLS/policies).\nDetalle: " + (e?.message || e));
       return false;
@@ -565,6 +625,7 @@ async function sbPullCurrentClose(){
       if(error) throw error;
 
       for(const row of (data || [])){
+      if(isPhantomRow(row)) continue;
         if(!row.count_date) continue;
         const close = cashCountsRowToClose(row);
         state.closes[String(close.id)] = deepClone(close);
@@ -1054,6 +1115,7 @@ function defaultClose(date, currency){
     $("sbPushBtn").addEventListener("click", sbUpsertCurrentClose);
     $("sbPullBtn").addEventListener("click", sbPullCurrentClose);
     $("sbPullAllBtn").addEventListener("click", ()=>sbPullAllCloses(false));
+    if($("sbDeleteAllBtn")) $("sbDeleteAllBtn").addEventListener("click", sbDeleteAllSupabase);
 
     const sel = $("sbAutoSync");
     if(sel){
