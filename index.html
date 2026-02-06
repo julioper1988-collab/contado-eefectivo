@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Control de Caja (Limpio)</title>
+  <title>Control de Caja (Supabase)</title>
   <style>
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial,sans-serif;background:#0b1220;color:#eaf2ff}
@@ -36,9 +36,10 @@
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>Control de Caja (Limpio)</h1>
-      <div class="muted">Contador de billetes y monedas + totales. Historial local por fecha y negocio. (Sin Supabase)</div>
-      <div class="row">
+      <h1>Control de Caja</h1>
+      <div class="pill" style="margin-top:10px"><b class="mono">Versión:</b> <span class="mono">v2.0.0-20260206131445</span></div>
+      <div class="muted" style="margin-top:8px">Contador de billetes y monedas + totales. Historial local + sincronización con Supabase (opcional).</div>
+      <div class="row" style="margin-top:10px">
         <div>
           <label>Negocio / Caja</label>
           <input id="biz" placeholder="Ej: Bodega, Asaditos, Conteo general" />
@@ -52,6 +53,46 @@
         <div class="pill"><b class="mono">Efectivo:</b> <span id="cashTotal" class="mono">0</span></div>
         <div class="pill"><b class="mono">Total general:</b> <span id="grandTotal" class="mono">0</span></div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 10px 0;font-size:18px">Supabase (sincronización entre dispositivos)</h2>
+      <div class="muted">
+        Requiere una tabla llamada <b>cash_counts</b> con columnas: business_name (text), count_date (date), timestamp (timestamptz), total (numeric/int), counts (jsonb), extra_amounts (jsonb), notes (text).
+        <br/>Para evitar duplicados: un índice único en (business_name, count_date).
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>Supabase URL</label>
+          <input id="sbUrl" placeholder="https://xxxxx.supabase.co" />
+        </div>
+        <div>
+          <label>Anon key</label>
+          <input id="sbAnon" placeholder="eyJhbGciOi..." />
+        </div>
+      </div>
+      <div class="btnRow" style="margin-top:10px">
+        <button class="primary" id="sbConnectBtn">Conectar</button>
+        <button id="sbTestBtn">Probar conexión</button>
+        <button class="warn" id="sbPullBtn">Bajar (historial)</button>
+        <button class="primary" id="sbPushBtn">Subir (este cierre)</button>
+        <button class="danger" id="sbDeleteBtn">Borrar (este cierre en Supabase)</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="pill"><b class="mono">Estado:</b> <span id="sbStatus" class="mono">Desconectado</span></div>
+        <div>
+          <label>Auto sync</label>
+          <select id="sbAuto">
+            <option value="off">OFF</option>
+            <option value="15">Cada 15s</option>
+            <option value="30" selected>Cada 30s</option>
+            <option value="60">Cada 60s</option>
+          </select>
+        </div>
+        <div class="pill"><b class="mono">Último sync:</b> <span id="sbLast" class="mono">—</span></div>
+      </div>
+      <label style="margin-top:10px">Log</label>
+      <textarea id="sbLog" readonly></textarea>
     </div>
 
     <div class="card">
@@ -86,11 +127,11 @@
 
     <div class="card">
       <div class="btnRow">
-        <button class="primary" id="saveBtn">Guardar cierre</button>
+        <button class="primary" id="saveBtn">Guardar cierre (local)</button>
         <button class="warn" id="loadBtn">Cargar (fecha + negocio)</button>
         <button class="danger" id="clearBtn">Borrar local (este cierre)</button>
       </div>
-      <div class="muted" style="margin-top:10px">Guardado en este dispositivo (localStorage).</div>
+      <div class="muted" style="margin-top:10px">Tip: “Subir (este cierre)” manda a Supabase; “Bajar (historial)” trae a este dispositivo y actualiza el historial local.</div>
     </div>
 
     <div class="card">
@@ -109,13 +150,17 @@
     </div>
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+  // === Config ===
   const BILLS = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 100];
   const COINS = [1000, 500, 100, 50];
 
   const $ = (id) => document.getElementById(id);
   const fmt = (n) => (Number(n||0)).toLocaleString("es-PY");
-  const stateKey = "caja_limpio_v1";
+  const stateKey = "caja_local_v2";
+  const sbCfgKey = "sb_cfg_v2";
+  const sbAutoKey = "sb_auto_v2";
 
   function todayISO(){
     const d = new Date();
@@ -161,10 +206,7 @@
       const inp = wrap.querySelector("#" + prefix + "_c_" + d);
       inp.addEventListener("input", updateTotals);
       inp.addEventListener("keydown", (e) => {
-        if(e.key === "Enter"){
-          e.preventDefault();
-          focusNextInput(inp);
-        }
+        if(e.key === "Enter"){ e.preventDefault(); focusNextInput(inp); }
       });
     });
   }
@@ -284,18 +326,13 @@
         const idx = (store2.items||[]).findIndex(x => x.id === id);
         if(idx < 0) return;
 
-        if(act === "open"){
-          loadRecord(store2.items[idx]);
-        } else if(act === "del"){
-          store2.items.splice(idx,1);
-          writeStore(store2);
-          renderHistory();
-        }
+        if(act === "open") loadRecord(store2.items[idx]);
+        else if(act === "del"){ store2.items.splice(idx,1); writeStore(store2); renderHistory(); }
       });
     });
   }
 
-  function saveCurrent(){
+  function saveCurrentLocal(){
     const rec = currentRecord();
     const store = readStore();
     const idx = (store.items||[]).findIndex(x => x.id === rec.id);
@@ -303,7 +340,7 @@
     else store.items.push(rec);
     writeStore(store);
     renderHistory();
-    alert("Guardado: " + rec.date + " · " + rec.biz);
+    alert("Guardado local: " + rec.date + " · " + rec.biz);
   }
 
   function loadByKey(){
@@ -312,12 +349,8 @@
     const id = keyOf(date, biz);
     const store = readStore();
     const rec = (store.items||[]).find(x => x.id === id);
-    if(!rec){
-      alert("No existe ese cierre en este dispositivo.");
-      return;
-    }
+    if(!rec){ alert("No existe ese cierre en este dispositivo."); return; }
     loadRecord(rec);
-    alert("Cargado: " + date + " · " + biz);
   }
 
   function clearCurrentLocal(){
@@ -326,16 +359,170 @@
     const id = keyOf(date, biz);
     const store = readStore();
     const idx = (store.items||[]).findIndex(x => x.id === id);
-    if(idx >= 0){
-      store.items.splice(idx,1);
-      writeStore(store);
-      renderHistory();
-      alert("Borrado local: " + date + " · " + biz);
-    } else {
-      alert("No había nada para borrar localmente.");
-    }
+    if(idx >= 0){ store.items.splice(idx,1); writeStore(store); renderHistory(); }
   }
 
+  // === Supabase ===
+  let sbClient = null;
+  let sbTimer = null;
+
+  function sbLog(msg){
+    const box = $("sbLog");
+    const t = new Date().toLocaleTimeString("es-PY");
+    box.value = "[" + t + "] " + msg + "\n" + box.value;
+  }
+  function sbSetStatus(s){ $("sbStatus").textContent = s; }
+  function sbSetLast(){ $("sbLast").textContent = new Date().toLocaleTimeString("es-PY"); }
+
+  function sbSaveCfg(){
+    const cfg = { url: $("sbUrl").value.trim(), anon: $("sbAnon").value.trim() };
+    localStorage.setItem(sbCfgKey, JSON.stringify(cfg));
+  }
+  function sbLoadCfg(){
+    const raw = localStorage.getItem(sbCfgKey);
+    if(!raw) return;
+    const cfg = JSON.parse(raw);
+    $("sbUrl").value = cfg.url || "";
+    $("sbAnon").value = cfg.anon || "";
+  }
+
+  async function sbConnect(){
+    const url = $("sbUrl").value.trim();
+    const anon = $("sbAnon").value.trim();
+    if(!url || !anon){ sbSetStatus("Desconectado"); sbLog("Falta URL o anon key."); return false; }
+    sbSaveCfg();
+    sbClient = window.supabase.createClient(url, anon);
+    sbSetStatus("Conectado");
+    sbLog("Conectado.");
+    return true;
+  }
+
+  async function sbTest(){
+    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
+    sbLog("Probando SELECT…");
+    const { error } = await sbClient.from("cash_counts").select("id").limit(1);
+    if(error){ sbSetStatus("Error"); sbLog("ERROR: " + error.message); alert("Error Supabase: " + error.message); return; }
+    sbSetStatus("OK");
+    sbLog("OK.");
+  }
+
+  function recordToRow(rec){
+    const counts = { bills: rec.bills || {}, coins: rec.coins || {} };
+    const extra_amounts = [
+      { detail: "Bancos", amount: Number(rec.banks||0) },
+      { detail: "Tarjetas/POS", amount: Number(rec.cards||0) },
+      { detail: "Otros", amount: Number(rec.others||0) },
+    ].filter(x => x.amount !== 0 || (x.detail||"").trim() !== "");
+    return {
+      business_name: rec.biz || "",
+      count_date: rec.date,
+      timestamp: new Date().toISOString(),
+      total: Number(rec.total||0),
+      counts: counts,
+      extra_amounts: extra_amounts,
+      notes: rec.notes || ""
+    };
+  }
+
+  function rowToRecord(row){
+    const bills = (row.counts && row.counts.bills) ? row.counts.bills : {};
+    const coins = (row.counts && row.counts.coins) ? row.counts.coins : {};
+
+    let banks=0, cards=0, others=0;
+    const extras = Array.isArray(row.extra_amounts) ? row.extra_amounts : [];
+    extras.forEach(x => {
+      const d = (x.detail||"").toLowerCase();
+      const a = Number(x.amount||0);
+      if(d.includes("banco")) banks += a;
+      else if(d.includes("tarjeta") || d.includes("pos") || d.includes("bancard")) cards += a;
+      else if(d.includes("otro")) others += a;
+    });
+
+    return {
+      id: keyOf(row.count_date, row.business_name || ""),
+      date: row.count_date,
+      biz: row.business_name || "",
+      bills: bills,
+      coins: coins,
+      banks: banks,
+      cards: cards,
+      others: others,
+      notes: row.notes || "",
+      total: Number(row.total||0),
+      updatedAt: row.timestamp || ""
+    };
+  }
+
+  async function sbPushCurrent(){
+    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
+    const rec = currentRecord();
+    if(!rec.biz || !rec.date){ alert("Completá negocio y fecha."); return; }
+
+    const row = recordToRow(rec);
+    sbLog("Subiendo (upsert) " + rec.date + " · " + rec.biz + "…");
+
+    const { error } = await sbClient.from("cash_counts").upsert(row, { onConflict: "business_name,count_date" });
+    if(error){ sbLog("ERROR subir: " + error.message); alert("No pude subir: " + error.message); return; }
+
+    sbLog("OK subido.");
+    sbSetLast();
+    await sbPullAll(true);
+  }
+
+  async function sbPullAll(silent){
+    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
+    sbLog("Bajando historial…");
+    const { data, error } = await sbClient.from("cash_counts").select("*").order("timestamp", { ascending:false }).limit(2000);
+    if(error){ sbLog("ERROR bajar: " + error.message); if(!silent) alert("No pude bajar: " + error.message); return; }
+
+    const store = readStore();
+    let applied = 0;
+    (data || []).forEach(row => {
+      // ignorar fantasma 0
+      const total = Number(row.total||0);
+      const name = (row.business_name||"").trim();
+      const hasCounts = row.counts && (Object.keys((row.counts.bills||{})).length || Object.keys((row.counts.coins||{})).length);
+      const hasExtras = Array.isArray(row.extra_amounts) && row.extra_amounts.length;
+      if(total === 0 && !name && !hasCounts && !hasExtras) return;
+
+      const rec = rowToRecord(row);
+      const idx = (store.items||[]).findIndex(x => x.id === rec.id);
+      if(idx >= 0) store.items[idx] = rec;
+      else store.items.push(rec);
+      applied++;
+    });
+    writeStore(store);
+    renderHistory();
+    sbSetLast();
+    sbLog("OK. Recibidos: " + (data||[]).length + " · Aplicados: " + applied);
+    if(!silent) alert("Historial actualizado.");
+  }
+
+  async function sbDeleteCurrent(){
+    if(!sbClient){ const ok = await sbConnect(); if(!ok) return; }
+    const biz = $("biz").value.trim();
+    const date = $("date").value;
+    if(!biz || !date){ alert("Completá negocio y fecha."); return; }
+
+    sbLog("Borrando en Supabase: " + date + " · " + biz + "…");
+    const { error } = await sbClient.from("cash_counts").delete().eq("business_name", biz).eq("count_date", date);
+    if(error){ sbLog("ERROR borrar: " + error.message); alert("No pude borrar: " + error.message); return; }
+
+    sbLog("OK borrado.");
+    sbSetLast();
+    await sbPullAll(true);
+  }
+
+  function sbSetupAuto(){
+    if(sbTimer){ clearInterval(sbTimer); sbTimer = null; }
+    const v = $("sbAuto").value;
+    localStorage.setItem(sbAutoKey, v);
+    if(v === "off") return;
+    const ms = Number(v) * 1000;
+    sbTimer = setInterval(()=>sbPullAll(true), ms);
+  }
+
+  // === Boot ===
   $("date").value = todayISO();
   buildGrid("billsGrid", BILLS, "b");
   buildGrid("coinsGrid", COINS, "m");
@@ -344,19 +531,33 @@
     $(id).addEventListener("input", updateTotals);
     $(id).addEventListener("change", updateTotals);
     $(id).addEventListener("keydown", (e) => {
-      if(e.key === "Enter"){
-        e.preventDefault();
-        focusNextInput(e.target);
-      }
+      if(e.key === "Enter"){ e.preventDefault(); focusNextInput(e.target); }
     });
   });
 
-  $("saveBtn").addEventListener("click", saveCurrent);
+  $("saveBtn").addEventListener("click", saveCurrentLocal);
   $("loadBtn").addEventListener("click", loadByKey);
   $("clearBtn").addEventListener("click", clearCurrentLocal);
 
+  // Supabase boot
+  sbLoadCfg();
+  const autoSaved = localStorage.getItem(sbAutoKey);
+  if(autoSaved) $("sbAuto").value = autoSaved;
+
+  $("sbConnectBtn").addEventListener("click", async ()=>{ await sbConnect(); sbSetupAuto(); });
+  $("sbTestBtn").addEventListener("click", sbTest);
+  $("sbPullBtn").addEventListener("click", ()=>sbPullAll(false));
+  $("sbPushBtn").addEventListener("click", sbPushCurrent);
+  $("sbDeleteBtn").addEventListener("click", sbDeleteCurrent);
+  $("sbAuto").addEventListener("change", sbSetupAuto);
+
   updateTotals();
   renderHistory();
+
+  // conectar automático si hay config
+  if(($("sbUrl").value.trim() && $("sbAnon").value.trim())){
+    sbConnect().then(()=>sbSetupAuto());
+  }
 </script>
 </body>
 </html>
