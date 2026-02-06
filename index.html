@@ -52,7 +52,6 @@
 <body>
 <header>
   <h1>Control de Caja (Cierres + Esperado + Descuadre)</h1>
-  <div class="pill" style="margin-top:8px; display:inline-flex;"><b class="mono">Versión:</b> <span id="appVersion" class="mono">v1.0.3-20260206000454</span></div>
   <div class="sub">Contá efectivo + bancos/tarjetas + extras. Cargá el “Esperado” de tu sistema y te calcula el descuadre. Guardás cierres por fecha con historial.</div>
 </header>
 
@@ -315,18 +314,6 @@
         <b class="mono">Último sync:</b> <span id="sbLastSync" class="mono">—</span>
       </div>
     </div>
-    <div class="hr"></div>
-    <h2>Diagnóstico</h2>
-    <div class="note">Si no sincroniza, tocá <b>Probar conexión</b> y mirá el log. Este log también ayuda a detectar si estás viendo una versión vieja (cache).</div>
-    <div class="btnRow" style="margin-top:10px;">
-      <button id="sbForcePullBtn">Sincronizar ahora</button>
-      <button class="danger" id="sbClearLocalBtn">Borrar datos locales</button>
-    </div>
-    <div style="margin-top:10px; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px; background:#0a111c;">
-      <div class="small muted" style="margin-bottom:6px;">Log Supabase</div>
-      <pre id="sbLog" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:11px; color:rgba(234,242,255,.9);"></pre>
-    </div>
-
 
 
 
@@ -364,14 +351,6 @@
   let sbReady = false;
 
   function sbSetStatus(msg){ const el = $("sbStatus"); if(el) el.textContent = msg; }
-
-  function sbLog(msg){
-    const el = $("sbLog");
-    if(!el) return;
-    const now = new Date();
-    const ts = String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
-    el.textContent = `[${ts}] ${msg}\n` + el.textContent;
-  }
 
   function sbMarkSync(){
     const el = $("sbLastSync");
@@ -423,19 +402,16 @@
     const cfg = sbGetConfig();
     if(!cfg.url || !cfg.anon){ alert("Pegá SUPABASE_URL y SUPABASE_ANON_KEY."); return; }
     sbSaveConfig(cfg.url, cfg.anon);
-    try{ sbLog("Conectando a Supabase…"); }catch(_){ }
     try {
       sbClient = window.supabase.createClient(cfg.url, cfg.anon);
       sbReady = true;
       sbSetStatus("Conectado");
-      try{ sbLog("✅ Conectado"); }catch(_){ }
       // Auto: traer historial al conectar
       try{ await sbPullAllCloses(true); }catch(_){ }
     } catch(e){
       console.error(e);
       sbClient = null; sbReady = false;
       sbSetStatus("Error");
-      try{ sbLog("❌ Error conectar: " + (e?.message || e)); }catch(_){ }
       alert("Error al conectar Supabase: " + (e?.message || e));
     }
   }
@@ -444,18 +420,12 @@
     if(!sbReady || !sbClient) await sbConnect();
     if(!sbClient) return;
     try {
-      sbLog("Probando conexión…");
-      const { data, error } = await sbClient.from("cash_counts").select("id,count_date,business_name,timestamp").order("timestamp",{ascending:false}).limit(5);
+      const { error } = await sbClient.from("cash_counts").select("id").limit(1);
       if(error) throw error;
-      sbLog("✅ OK. Últimos registros: " + (data?.length || 0));
-      if(data && data.length){
-        sbLog("Ejemplo: " + data.map(x => `${x.count_date} · ${x.business_name || 'Caja'} · ${x.id}`).join(" | "));
-      }
-      alert("✅ Conexión OK con Supabase (cash_counts).\n\nVersión app: " + (document.getElementById("appVersion")?.textContent || "") + "\nRegistros leídos: " + (data?.length || 0));
+      alert("✅ Conexión OK con Supabase (cash_counts).");
     } catch(e){
       console.error(e);
-      sbLog("❌ ERROR test: " + (e?.message || e));
-      alert("❌ No pude conectar / leer cash_counts.\n\nDetalle: " + (e?.message || e) + "\n\nSi estás seguro de URL/KEY, revisá RLS/policies.");
+      alert("❌ No pude conectar / consultar cash_counts. Revisá URL/KEY y políticas RLS.\n\nDetalle: " + (e?.message || e));
     }
   }
 
@@ -540,7 +510,23 @@
     }
   }
 
-  async function sbPullCurrentClose(){
+  
+  async function sbDeleteById(id){
+    if(!sbReady || !sbClient) await sbConnect();
+    if(!sbClient) return false;
+
+    try{
+      const { error } = await sbClient.from("cash_counts").delete().eq("id", Number(id));
+      if(error) throw error;
+      return true;
+    }catch(e){
+      console.error(e);
+      alert("No pude borrar en Supabase (probable RLS/policies).\nDetalle: " + (e?.message || e));
+      return false;
+    }
+  }
+
+async function sbPullCurrentClose(){
     if(!sbReady || !sbClient) await sbConnect();
     if(!sbClient) return;
 
@@ -574,32 +560,23 @@
     if(!sbClient) return;
 
     try {
-      sbLog("Bajando historial…");
-      const { data, error } = await sbClient.from("cash_counts").select("*").order("timestamp", { ascending:false }).limit(1000);
+      const { data, error } = await sbClient.from("cash_counts").select("*").order("timestamp", { ascending:false }).limit(500);
       if(error) throw error;
 
-      let ok = 0, bad = 0;
       for(const row of (data || [])){
-        try{
-          if(!row.count_date) continue;
-          const close = cashCountsRowToClose(row);
-          state.closes[String(close.id)] = deepClone(close);
-          ok++;
-        }catch(eRow){
-          bad++;
-          sbLog("⚠️ Registro omitido (formato viejo): id=" + row.id + " · " + (eRow?.message || eRow));
-        }
+        if(!row.count_date) continue;
+        const close = cashCountsRowToClose(row);
+        state.closes[String(close.id)] = deepClone(close);
       }
       saveState();
       renderClosesTable();
+    // Auto: si Supabase está conectado, sube este cierre
+    if(typeof sbUpsertCurrentClose === 'function' && sbReady){ sbUpsertCurrentClose(); }
       sbSetStatus("Conectado · historial actualizado");
+      if(!silent) alert("Historial bajado: " + (data?.length || 0) + " registros.");
       sbMarkSync();
-      sbLog("Listo. OK=" + ok + " · Omitidos=" + bad);
-
-      if(!silent) alert("Historial bajado: " + ok + " registros. (Omitidos: " + bad + ")");
     } catch(e){
       console.error(e);
-      sbLog("❌ ERROR bajar todo: " + (e?.message || e));
       alert("⚠️ No pude bajar todo.\nDetalle: " + (e?.message || e));
     }
   }
@@ -934,12 +911,18 @@ function defaultClose(date, currency){
       const btnDel = document.createElement("button");
       btnDel.textContent = "Borrar";
       btnDel.className = "danger";
-      btnDel.onclick = () => {
-        if(confirm("¿Borrar cierre del " + c.date + " del historial?")){
-          delete state.closes[String(c.id)];
-          saveState();
-          renderClosesTable();
+      btnDel.onclick = async () => {
+        const msg = "¿Borrar este cierre?\n\nOK = borrar también en Supabase (en todos los dispositivos).\nCancelar = borrar solo local (pero puede volver a aparecer al sincronizar).";
+        const delSupabase = confirm(msg);
+
+        if(delSupabase){
+          const ok = await sbDeleteById(c.id);
+          if(!ok) return; // si falla, no borra local para evitar que reaparezca
         }
+
+        delete state.closes[String(c.id)];
+        saveState();
+        renderClosesTable();
       };
 
       wrap.appendChild(btnLoad);
