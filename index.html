@@ -44,9 +44,7 @@
     @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
     .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#74c0fc;border-radius:50%;animation:spin .6s linear infinite}
     .tabs{display:flex;gap:0;margin:12px -14px 0 -14px}
-    .tab{flex:1;padding:14px;text-align:center;cursor:pointer;font-size:15px;font-weight:600;border:1px solid rgba(255,255,255,.08);background:#0a111c;color:rgba(234,242,255,.5);transition:all .2s}
-    .tab:first-child{border-radius:0 0 0 0}
-    .tab:last-child{border-radius:0 0 0 0}
+    .tab{flex:1;padding:12px 6px;text-align:center;cursor:pointer;font-size:13px;font-weight:600;border:1px solid rgba(255,255,255,.08);background:#0a111c;color:rgba(234,242,255,.5);transition:all .2s}
     .tab.active{background:#1c7ed6;color:#fff;border-color:rgba(255,255,255,.18)}
     .tab-content{display:none}
     .tab-content.active{display:block}
@@ -63,6 +61,34 @@
     .date-nav{display:flex;gap:6px;align-items:center}
     .date-nav button{width:42px;min-width:42px;flex:none;padding:10px;font-size:16px;cursor:pointer;border-radius:10px}
     .date-nav input{flex:1}
+
+    /* === MÁQUINAS STYLES === */
+    .maq-box{background:#0a111c;border:1px solid rgba(255,140,0,.18);border-radius:14px;padding:14px;margin-bottom:10px}
+    .maq-box-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+    .maq-badge{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.5px}
+    .maq-badge.billetero{background:rgba(255,180,0,.15);border:1px solid rgba(255,180,0,.35);color:#ffd43b}
+    .maq-badge.tragamonedas{background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.35);color:#c084fc}
+    .maq-totals{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .maq-pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border-radius:999px;font-size:12px}
+    .maq-pill.orange{background:rgba(255,140,0,.12);border:1px solid rgba(255,140,0,.25);color:#ffa94d}
+    .maq-pill.purple{background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.25);color:#c084fc}
+    .maq-pill.red{background:rgba(201,42,42,.15);border:1px solid rgba(201,42,42,.3);color:#ff8787}
+    .maq-pill.green{background:rgba(43,138,62,.15);border:1px solid rgba(43,138,62,.3);color:#69db7c}
+
+    /* Tabla máquinas */
+    .maq-table-row{display:grid;grid-template-columns:90px 1fr 110px 90px 90px 80px;gap:8px;align-items:center;padding:10px 12px;border-radius:10px;margin-bottom:6px;background:#0a111c;border:1px solid rgba(255,255,255,.06);font-size:13px}
+    .maq-table-row.header{opacity:.5;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:transparent;border:none;padding-bottom:4px;margin-bottom:0}
+    .maq-table-row.cobrado{opacity:.45}
+    .maq-table-row.cobrado .maq-badge{opacity:.5}
+    @media(max-width:600px){
+      .maq-table-row{grid-template-columns:80px 1fr 100px 80px}
+      .maq-table-row .col-obs,.maq-table-row .col-acc2{display:none}
+    }
+
+    /* Modal cobro */
+    .cobro-modal .modal{max-width:420px}
+    .cobro-info{background:#0a111c;border-radius:12px;padding:12px;margin-bottom:14px}
+    .cobro-info .ci-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
   </style>
 </head>
 <body>
@@ -73,6 +99,7 @@
       <div id="syncStatus"></div>
       <div class="tabs">
         <div class="tab active" data-tab="carga">📝 Nuevo cierre</div>
+        <div class="tab" data-tab="maquinas">🎰 Máquinas</div>
         <div class="tab" data-tab="historial">📋 Historial</div>
       </div>
     </div>
@@ -125,11 +152,102 @@
           <div class="pill"><b class="mono">Subtotal:</b> <span id="extrasTotal" class="mono">0</span></div>
         </div>
       </div>
+
+      <!-- MÁQUINAS EN CIERRE -->
+      <div class="card" style="border-color:rgba(255,140,0,.2)">
+        <h2>🎰 Pagos a máquinas</h2>
+        <p class="muted" style="margin:0 0 12px">Montos que salieron de tu caja para cargar billetero o tragamonedas. Se registran como pendientes de cobro al técnico.</p>
+
+        <div class="maq-box" id="maqBillBox">
+          <div class="maq-box-header">
+            <span class="maq-badge billetero">💵 Billetero</span>
+            <span class="muted" style="font-size:12px">Monto cargado hoy</span>
+          </div>
+          <div class="row">
+            <div>
+              <label>Monto pagado (Gs.)</label>
+              <input id="maqBillMonto" inputmode="numeric" placeholder="0" />
+            </div>
+            <div>
+              <label>Observación (opcional)</label>
+              <input id="maqBillObs" placeholder="Ej: 2da carga del día" />
+            </div>
+          </div>
+        </div>
+
+        <div class="maq-box" style="border-color:rgba(168,85,247,.18)" id="maqTragBox">
+          <div class="maq-box-header">
+            <span class="maq-badge tragamonedas">🎰 Tragamonedas</span>
+            <span class="muted" style="font-size:12px">Monto cargado hoy</span>
+          </div>
+          <div class="row">
+            <div>
+              <label>Monto pagado (Gs.)</label>
+              <input id="maqTragMonto" inputmode="numeric" placeholder="0" />
+            </div>
+            <div>
+              <label>Observación (opcional)</label>
+              <input id="maqTragObs" placeholder="Ej: 1ra carga del día" />
+            </div>
+          </div>
+        </div>
+
+        <div class="maq-totals">
+          <div class="maq-pill orange">💵 Billetero hoy: <b class="mono" id="pillBill">Gs. 0</b></div>
+          <div class="maq-pill purple">🎰 Tragamonedas hoy: <b class="mono" id="pillTrag">Gs. 0</b></div>
+          <div class="maq-pill red">📌 Pendiente total: <b class="mono" id="pillPendTotal">Gs. 0</b></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="btnRow">
           <button class="primary" id="saveBtn">☁️ Guardar cierre</button>
           <button class="success" id="newBtn">✨ Limpiar</button>
         </div>
+      </div>
+    </div>
+
+    <!-- TAB MÁQUINAS -->
+    <div id="tab-maquinas" class="tab-content">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <h2 style="margin:0">Seguimiento de máquinas</h2>
+          <button class="primary" id="maqRefreshBtn" style="width:auto;padding:8px 16px;font-size:13px">🔄 Actualizar</button>
+        </div>
+
+        <!-- Resumen saldos -->
+        <div id="maqResumen" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+        <!-- Filtros -->
+        <div class="row" style="margin-bottom:10px">
+          <div>
+            <label>Filtrar por tipo</label>
+            <select id="maqFiltroTipo">
+              <option value="">Todos</option>
+              <option value="billetero">💵 Billetero</option>
+              <option value="tragamonedas">🎰 Tragamonedas</option>
+            </select>
+          </div>
+          <div>
+            <label>Filtrar por estado</label>
+            <select id="maqFiltroEstado">
+              <option value="pendiente">Solo pendientes</option>
+              <option value="">Todos</option>
+              <option value="cobrado">Solo cobrados</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Header tabla -->
+        <div class="maq-table-row header">
+          <div>Fecha</div>
+          <div>Tipo</div>
+          <div class="right">Monto</div>
+          <div>Estado</div>
+          <div class="col-obs">Observación</div>
+          <div class="right col-acc2">Acción</div>
+        </div>
+        <div id="maqBody"></div>
       </div>
     </div>
 
@@ -153,7 +271,7 @@
     </div>
   </div>
 
-  <!-- MODAL RESUMEN -->
+  <!-- MODAL RESUMEN CIERRE -->
   <div class="modal-bg" id="summaryModal">
     <div class="modal">
       <h2 id="sumTitle">Resumen del cierre</h2>
@@ -166,6 +284,22 @@
     </div>
   </div>
 
+  <!-- MODAL COBRO MÁQUINA -->
+  <div class="modal-bg cobro-modal" id="cobroModal">
+    <div class="modal">
+      <h2>💰 Registrar cobro</h2>
+      <div class="cobro-info" id="cobroInfo"></div>
+      <label>Fecha de cobro</label>
+      <input id="cobroFecha" type="date" />
+      <label style="margin-top:10px">Observación (opcional)</label>
+      <input id="cobroObs" placeholder="Ej: Pagó el técnico Juan" />
+      <div class="btnRow" style="margin-top:16px">
+        <button class="success" id="cobroConfirmBtn">✓ Confirmar cobro</button>
+        <button class="warn" id="cobroCancelBtn">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
   const SUPABASE_URL="https://gqgzluwptmgvzdewjusp.supabase.co";
@@ -173,11 +307,13 @@
   let sb;
   try{sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY)}catch(e){console.error(e)}
   const TABLE="caja_cierres";
+  const TABLE_MAQ="maquinas_pagos";
   const $=id=>document.getElementById(id);
   const fmt=n=>(Number(n||0)).toLocaleString("es-PY");
   const BILLS=[100000,50000,20000,10000,5000,2000,1000,500,100];
   const COINS=[1000,500,100,50];
   let currentModalRec=null;
+  let currentCobroId=null;
 
   function todayISO(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
   function keyOf(date,biz){return date+"__"+(biz||"").trim().toLowerCase()}
@@ -191,7 +327,7 @@
     else el.innerHTML='';
   }
 
-  // Tabs
+  // ========== TABS ==========
   document.querySelectorAll(".tab").forEach(tab=>{
     tab.addEventListener("click",()=>{
       document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
@@ -199,6 +335,7 @@
       tab.classList.add("active");
       $("tab-"+tab.dataset.tab).classList.add("active");
       if(tab.dataset.tab==="historial")renderHistory();
+      if(tab.dataset.tab==="maquinas")renderMaquinas();
     });
   });
   function switchToTab(name){
@@ -207,7 +344,7 @@
     $("tab-"+name).classList.add("active");
   }
 
-  // Date nav
+  // ========== DATE NAV ==========
   function shiftDate(days){
     const d=new Date($("date").value||todayISO());
     d.setDate(d.getDate()+days);
@@ -217,7 +354,7 @@
   $("prevDay").addEventListener("click",()=>shiftDate(-1));
   $("nextDay").addEventListener("click",()=>shiftDate(1));
 
-  // Grid
+  // ========== GRID ==========
   function buildGrid(cid,denoms,prefix){
     const grid=$(cid);grid.innerHTML="";
     denoms.forEach(d=>{
@@ -235,7 +372,7 @@
   function setCounts(p,d,c){d.forEach(v=>{$(p+"_c_"+v).value=(c&&c[v]!=null)?String(c[v]):""})}
   function sumCounts(d,c){let t=0;d.forEach(v=>{t+=Number(v)*numVal(c[v])});return t}
 
-  // Extra items
+  // ========== EXTRA ITEMS ==========
   let extraCounter=0;
   function addExtraItem(concepto,monto){
     extraCounter++;
@@ -265,26 +402,40 @@
   function setExtraItems(items){$("extraItems").innerHTML="";extraCounter=0;(items||[]).forEach(it=>addExtraItem(it.concepto,it.monto||0))}
   function sumExtras(){let t=0;document.querySelectorAll("#extraItems .extra-row").forEach(r=>{t+=numVal(r.querySelectorAll("input")[1].value)});return t}
 
-  // Totals
+  // ========== TOTALS ==========
   function updateTotals(){
     const bills=getCounts("b",BILLS),coins=getCounts("m",COINS);
     BILLS.forEach(d=>{$("b_t_"+d).textContent=fmt(Number(d)*numVal(bills[d]))});
     COINS.forEach(d=>{$("m_t_"+d).textContent=fmt(Number(d)*numVal(coins[d]))});
     const cash=sumCounts(BILLS,bills)+sumCounts(COINS,coins);
     const banks=numVal($("banks").value),cards=numVal($("cards").value),others=numVal($("others").value),extras=sumExtras();
+    const maqBill=numVal($("maqBillMonto").value);
+    const maqTrag=numVal($("maqTragMonto").value);
     $("cashTotal").textContent=fmt(cash);
     $("extrasTotal").textContent=fmt(extras);
-    $("grandTotal").textContent=fmt(cash+banks+cards+others+extras);
+    $("pillBill").textContent="Gs. "+fmt(maqBill);
+    $("pillTrag").textContent="Gs. "+fmt(maqTrag);
+    // pendiente total viene de supabase, solo mostramos lo de hoy por ahora
+    $("grandTotal").textContent=fmt(cash+banks+cards+others+extras+maqBill+maqTrag);
   }
 
-  // Record
+  // ========== RECORD ==========
   function currentRecord(){
     const biz=$("biz").value.trim()||"Caja",date=$("date").value||todayISO();
     const bills=getCounts("b",BILLS),coins=getCounts("m",COINS);
     const banks=numVal($("banks").value),cards=numVal($("cards").value),others=numVal($("others").value);
     const notes=$("notes").value||"",extras=getExtraItems(),extrasTotal=sumExtras();
     const cash=sumCounts(BILLS,bills)+sumCounts(COINS,coins);
-    return{record_id:keyOf(date,biz),fecha:date,negocio:biz,bills,coins,bancos:banks,tarjetas:cards,otros:others,notas:notes,extras,extras_total:extrasTotal,efectivo:cash,total:cash+banks+cards+others+extrasTotal,updated_at:new Date().toISOString()};
+    const maqBill=numVal($("maqBillMonto").value);
+    const maqTrag=numVal($("maqTragMonto").value);
+    return{
+      record_id:keyOf(date,biz),fecha:date,negocio:biz,bills,coins,
+      bancos:banks,tarjetas:cards,otros:others,notas:notes,
+      extras,extras_total:extrasTotal,efectivo:cash,
+      maq_billetero:maqBill,maq_tragamonedas:maqTrag,
+      total:cash+banks+cards+others+extrasTotal+maqBill+maqTrag,
+      updated_at:new Date().toISOString()
+    };
   }
   function loadRecord(rec){
     $("biz").value=rec.negocio||"";$("date").value=rec.fecha||todayISO();
@@ -293,15 +444,18 @@
     $("cards").value=(rec.tarjetas||rec.cards)?String(rec.tarjetas||rec.cards):"";
     $("others").value=(rec.otros||rec.others)?String(rec.otros||rec.others):"";
     $("notes").value=rec.notas||rec.notes||"";
+    $("maqBillMonto").value=rec.maq_billetero?String(rec.maq_billetero):"";
+    $("maqTragMonto").value=rec.maq_tragamonedas?String(rec.maq_tragamonedas):"";
     setExtraItems(rec.extras||[]);updateTotals();
   }
   function clearForm(){
     setCounts("b",BILLS,{});setCounts("m",COINS,{});
     $("banks").value="";$("cards").value="";$("others").value="";$("notes").value="";$("biz").value="";$("date").value=todayISO();
+    $("maqBillMonto").value="";$("maqTragMonto").value="";$("maqBillObs").value="";$("maqTragObs").value="";
     setExtraItems([]);updateTotals();window.scrollTo({top:0,behavior:"smooth"});
   }
 
-  // Summary modal
+  // ========== SUMMARY MODAL ==========
   function showSummary(rec){
     currentModalRec=rec;
     $("sumTitle").textContent=rec.negocio+" — "+rec.fecha;
@@ -319,6 +473,11 @@
     }
     const ex=rec.extras||[];
     if(ex.length){h+='<div class="sum-section">Montos adicionales</div>';ex.forEach(it=>{h+='<div class="sum-row"><b>'+it.concepto+'</b><span class="val">'+fmt(it.monto)+'</span></div>'});h+='<div class="sum-row" style="font-weight:600"><b>Subtotal adicionales</b><span class="val">'+fmt(rec.extras_total||0)+'</span></div>'}
+    if((rec.maq_billetero||0)>0||(rec.maq_tragamonedas||0)>0){
+      h+='<div class="sum-section">Máquinas</div>';
+      if(rec.maq_billetero)h+='<div class="sum-row"><b>💵 Billetero</b><span class="val">'+fmt(rec.maq_billetero)+'</span></div>';
+      if(rec.maq_tragamonedas)h+='<div class="sum-row"><b>🎰 Tragamonedas</b><span class="val">'+fmt(rec.maq_tragamonedas)+'</span></div>';
+    }
     if(rec.notas){h+='<div class="sum-section">Notas</div><div style="font-size:13px;opacity:.8;white-space:pre-wrap;padding:6px 0">'+rec.notas+'</div>'}
     h+='<div class="sum-row sum-total"><b>TOTAL GENERAL</b><span class="val" style="color:#69db7c">Gs. '+fmt(rec.total||0)+'</span></div>';
     $("sumContent").innerHTML=h;
@@ -346,7 +505,7 @@
     }catch(e){showSync("err","Error: "+errMsg(e))}
   });
 
-  // Save
+  // ========== SAVE ==========
   async function saveToCloud(){
     const rec=currentRecord();
     if(rec.total===0&&!confirm("El total es 0. ¿Guardar?"))return;
@@ -357,12 +516,120 @@
       if(existing)result=await sb.from(TABLE).update(rec).eq("record_id",rec.record_id);
       else result=await sb.from(TABLE).insert(rec);
       if(result.error)throw result.error;
+
+      // Guardar pagos a máquinas si hay montos
+      const maqRows=[];
+      if(rec.maq_billetero>0){
+        maqRows.push({fecha:rec.fecha,tipo:"billetero",monto:rec.maq_billetero,observacion:$("maqBillObs").value||null,cobrado:false,record_id:rec.record_id});
+      }
+      if(rec.maq_tragamonedas>0){
+        maqRows.push({fecha:rec.fecha,tipo:"tragamonedas",monto:rec.maq_tragamonedas,observacion:$("maqTragObs").value||null,cobrado:false,record_id:rec.record_id});
+      }
+      if(maqRows.length>0){
+        const{error:maqErr}=await sb.from(TABLE_MAQ).insert(maqRows);
+        if(maqErr)console.warn("Máquinas save error:",maqErr);
+      }
+
       showSync("ok","✓ Guardado: "+rec.fecha+" · "+rec.negocio+" · Gs. "+fmt(rec.total));
       clearForm();
+      // Actualizar pendiente total
+      loadPendienteTotal();
     }catch(e){console.error("Save:",e);showSync("err","Error: "+errMsg(e))}
   }
 
-  // History
+  // ========== PENDIENTE TOTAL ==========
+  async function loadPendienteTotal(){
+    try{
+      const{data}=await sb.from(TABLE_MAQ).select("monto").eq("cobrado",false);
+      const total=(data||[]).reduce((s,r)=>s+(r.monto||0),0);
+      $("pillPendTotal").textContent="Gs. "+fmt(total);
+    }catch(e){console.warn("pendiente:",e)}
+  }
+
+  // ========== RENDER MÁQUINAS ==========
+  async function renderMaquinas(){
+    const body=$("maqBody");
+    const resumen=$("maqResumen");
+    const tipo=$("maqFiltroTipo").value;
+    const estado=$("maqFiltroEstado").value;
+    body.innerHTML='<div style="text-align:center;padding:20px;opacity:.5"><span class="spinner"></span></div>';
+    try{
+      let q=sb.from(TABLE_MAQ).select("*").order("fecha",{ascending:false}).order("created_at",{ascending:false}).limit(200);
+      if(tipo)q=q.eq("tipo",tipo);
+      if(estado==="pendiente")q=q.eq("cobrado",false);
+      if(estado==="cobrado")q=q.eq("cobrado",true);
+      const{data,error}=await q;if(error)throw error;
+      const items=data||[];
+
+      // Resumen
+      const pendBill=(items.filter(r=>r.tipo==="billetero"&&!r.cobrado).reduce((s,r)=>s+r.monto,0));
+      const pendTrag=(items.filter(r=>r.tipo==="tragamonedas"&&!r.cobrado).reduce((s,r)=>s+r.monto,0));
+      const cobTotal=(items.filter(r=>r.cobrado).reduce((s,r)=>s+r.monto,0));
+      resumen.innerHTML=
+        '<div class="maq-pill orange" style="font-size:13px;padding:8px 14px">💵 Pendiente billetero<br><b class="mono" style="font-size:15px">Gs. '+fmt(pendBill)+'</b></div>'+
+        '<div class="maq-pill purple" style="font-size:13px;padding:8px 14px">🎰 Pendiente tragamonedas<br><b class="mono" style="font-size:15px">Gs. '+fmt(pendTrag)+'</b></div>'+
+        '<div class="maq-pill red" style="font-size:13px;padding:8px 14px">📌 Total pendiente<br><b class="mono" style="font-size:15px">Gs. '+fmt(pendBill+pendTrag)+'</b></div>'+
+        '<div class="maq-pill green" style="font-size:13px;padding:8px 14px">✅ Total cobrado<br><b class="mono" style="font-size:15px">Gs. '+fmt(cobTotal)+'</b></div>';
+
+      body.innerHTML="";
+      if(!items.length){body.innerHTML='<div style="text-align:center;padding:30px;opacity:.4">No hay registros</div>';return}
+      items.forEach(r=>{
+        const isCob=r.cobrado;
+        const badge=r.tipo==="billetero"
+          ?'<span class="maq-badge billetero">💵 Billetero</span>'
+          :'<span class="maq-badge tragamonedas">🎰 Tragamonedas</span>';
+        const estadoBadge=isCob
+          ?'<span class="maq-pill green" style="font-size:11px;padding:3px 8px">✅ Cobrado</span>'
+          :'<span class="maq-pill red" style="font-size:11px;padding:3px 8px">⏳ Pendiente</span>';
+        const accion=isCob
+          ?'<span style="font-size:11px;opacity:.4">—</span>'
+          :'<button data-id="'+r.id+'" data-tipo="'+r.tipo+'" data-monto="'+r.monto+'" data-fecha="'+r.fecha+'" class="cobrar-btn" style="padding:6px 10px;border-radius:8px;cursor:pointer;background:#2b8a3e;border-color:rgba(255,255,255,.18);font-size:12px;width:auto">💰 Cobrar</button>';
+        const row=document.createElement("div");
+        row.className="maq-table-row"+(isCob?" cobrado":"");
+        row.innerHTML=
+          '<div>'+r.fecha+'</div>'+
+          '<div>'+badge+'</div>'+
+          '<div class="right mono">Gs. '+fmt(r.monto)+'</div>'+
+          '<div>'+estadoBadge+'</div>'+
+          '<div class="col-obs" style="opacity:.6;font-size:12px">'+(r.observacion||'—')+'</div>'+
+          '<div class="right col-acc2">'+accion+'</div>';
+        body.appendChild(row);
+      });
+      // Botones cobrar
+      body.querySelectorAll(".cobrar-btn").forEach(btn=>{
+        btn.addEventListener("click",()=>{
+          currentCobroId=btn.dataset.id;
+          $("cobroInfo").innerHTML=
+            '<div class="ci-row"><b>Tipo:</b><span>'+(btn.dataset.tipo==="billetero"?"💵 Billetero":"🎰 Tragamonedas")+'</span></div>'+
+            '<div class="ci-row"><b>Fecha pago:</b><span>'+btn.dataset.fecha+'</span></div>'+
+            '<div class="ci-row"><b>Monto:</b><span class="mono" style="color:#ffd43b">Gs. '+fmt(btn.dataset.monto)+'</span></div>';
+          $("cobroFecha").value=todayISO();
+          $("cobroObs").value="";
+          $("cobroModal").classList.add("show");
+        });
+      });
+    }catch(e){body.innerHTML='<div style="color:#ff8787;padding:16px">Error: '+errMsg(e)+'</div>'}
+  }
+
+  // ========== COBRO MODAL ==========
+  $("cobroCancelBtn").addEventListener("click",()=>{$("cobroModal").classList.remove("show");currentCobroId=null});
+  $("cobroModal").addEventListener("click",e=>{if(e.target===$("cobroModal")){$("cobroModal").classList.remove("show");currentCobroId=null}});
+  $("cobroConfirmBtn").addEventListener("click",async()=>{
+    if(!currentCobroId)return;
+    const fecha=$("cobroFecha").value||todayISO();
+    const obs=$("cobroObs").value||null;
+    showSync("loading","Registrando cobro...");
+    try{
+      const{error}=await sb.from(TABLE_MAQ).update({cobrado:true,fecha_cobro:fecha,observacion:obs}).eq("id",currentCobroId);
+      if(error)throw error;
+      showSync("ok","✓ Cobro registrado correctamente");
+      $("cobroModal").classList.remove("show");currentCobroId=null;
+      await renderMaquinas();
+      loadPendienteTotal();
+    }catch(e){showSync("err","Error: "+errMsg(e))}
+  });
+
+  // ========== HISTORY ==========
   async function renderHistory(){
     const body=$("histBody");
     const fBiz=($("filterBiz").value||"").trim().toLowerCase();
@@ -397,11 +664,11 @@
   $("filterDate").addEventListener("change",renderHistory);
   $("clearFilterBtn").addEventListener("click",()=>{$("filterBiz").value="";$("filterDate").value="";renderHistory()});
 
-  // Init
+  // ========== INIT ==========
   $("date").value=todayISO();
   buildGrid("billsGrid",BILLS,"b");
   buildGrid("coinsGrid",COINS,"m");
-  ["banks","cards","others","biz","date","notes"].forEach(id=>{
+  ["banks","cards","others","biz","date","notes","maqBillMonto","maqTragMonto"].forEach(id=>{
     $(id).addEventListener("input",updateTotals);
     $(id).addEventListener("change",updateTotals);
     $(id).addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();focusNextInput(e.target)}});
@@ -410,7 +677,13 @@
   $("newBtn").addEventListener("click",()=>{clearForm();showSync("","")});
   $("addExtraBtn").addEventListener("click",()=>{const r=addExtraItem("","");r.querySelector("input").focus()});
   $("refreshBtn").addEventListener("click",renderHistory);
-  updateTotals();renderHistory();
+  $("maqRefreshBtn").addEventListener("click",renderMaquinas);
+  $("maqFiltroTipo").addEventListener("change",renderMaquinas);
+  $("maqFiltroEstado").addEventListener("change",renderMaquinas);
+
+  updateTotals();
+  renderHistory();
+  loadPendienteTotal();
 </script>
 </body>
 </html>
