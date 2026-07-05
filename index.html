@@ -65,6 +65,8 @@
     /* === MÁQUINAS STYLES === */
     .maq-box{background:#0a111c;border:1px solid rgba(255,140,0,.18);border-radius:14px;padding:14px;margin-bottom:10px}
     .maq-box-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+    .maq-add-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px}
+    .maq-add-btn{width:auto;padding:6px 12px;font-size:12px}
     .maq-badge{padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.5px}
     .maq-badge.billetero{background:rgba(255,180,0,.15);border:1px solid rgba(255,180,0,.35);color:#ffd43b}
     .maq-badge.tragamonedas{background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.35);color:#c084fc}
@@ -161,34 +163,22 @@
         <div class="maq-box" id="maqBillBox">
           <div class="maq-box-header">
             <span class="maq-badge billetero">💵 Billetero</span>
-            <span class="muted" style="font-size:12px">Monto cargado hoy</span>
+            <span class="muted" style="font-size:12px">Montos cargados hoy</span>
           </div>
-          <div class="row">
-            <div>
-              <label>Monto pagado (Gs.)</label>
-              <input id="maqBillMonto" inputmode="numeric" placeholder="0" />
-            </div>
-            <div>
-              <label>Observación (opcional)</label>
-              <input id="maqBillObs" placeholder="Ej: 2da carga del día" />
-            </div>
+          <div id="maqBillItems"></div>
+          <div class="maq-add-row">
+            <button class="success maq-add-btn" id="addMaqBillBtn" type="button">＋ Agregar carga</button>
           </div>
         </div>
 
         <div class="maq-box" style="border-color:rgba(168,85,247,.18)" id="maqTragBox">
           <div class="maq-box-header">
             <span class="maq-badge tragamonedas">🎰 Tragamonedas</span>
-            <span class="muted" style="font-size:12px">Monto cargado hoy</span>
+            <span class="muted" style="font-size:12px">Montos cargados hoy</span>
           </div>
-          <div class="row">
-            <div>
-              <label>Monto pagado (Gs.)</label>
-              <input id="maqTragMonto" inputmode="numeric" placeholder="0" />
-            </div>
-            <div>
-              <label>Observación (opcional)</label>
-              <input id="maqTragObs" placeholder="Ej: 1ra carga del día" />
-            </div>
+          <div id="maqTragItems"></div>
+          <div class="maq-add-row">
+            <button class="success maq-add-btn" id="addMaqTragBtn" type="button">＋ Agregar carga</button>
           </div>
         </div>
 
@@ -402,6 +392,34 @@
   function setExtraItems(items){$("extraItems").innerHTML="";extraCounter=0;(items||[]).forEach(it=>addExtraItem(it.concepto,it.monto||0))}
   function sumExtras(){let t=0;document.querySelectorAll("#extraItems .extra-row").forEach(r=>{t+=numVal(r.querySelectorAll("input")[1].value)});return t}
 
+  // ========== MÁQUINAS: LÍNEAS MÚLTIPLES ==========
+  function addMaqItem(containerId,monto,obs){
+    const container=$(containerId);
+    const row=document.createElement("div");row.className="extra-row";
+    const mInp=document.createElement("input");mInp.type="text";mInp.inputMode="numeric";mInp.placeholder="Monto (Gs.)";mInp.value=monto?String(monto):"";
+    const oInp=document.createElement("input");oInp.type="text";oInp.placeholder="Observación (opcional)";oInp.value=obs||"";
+    const del=document.createElement("button");del.type="button";del.textContent="✕";
+    row.appendChild(mInp);row.appendChild(oInp);row.appendChild(del);
+    container.appendChild(row);
+    mInp.addEventListener("input",updateTotals);
+    del.addEventListener("click",()=>{row.remove();updateTotals()});
+    mInp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();oInp.focus()}});
+    oInp.addEventListener("keydown",e=>{
+      if(e.key==="Enter"){
+        e.preventDefault();
+        const rows=Array.from(container.querySelectorAll(".extra-row"));
+        const idx=rows.indexOf(row);
+        if(idx<rows.length-1){rows[idx+1].querySelector("input").focus()}
+        else{const nr=addMaqItem(containerId,"","");nr.querySelector("input").focus()}
+      }
+    });
+    updateTotals();
+    return row;
+  }
+  function getMaqItems(containerId){const items=[];document.querySelectorAll("#"+containerId+" .extra-row").forEach(r=>{const inp=r.querySelectorAll("input");const m=numVal(inp[0].value);const o=(inp[1].value||"").trim();if(m||o)items.push({monto:m,observacion:o})});return items}
+  function setMaqItems(containerId,items){$(containerId).innerHTML="";(items&&items.length?items:[{monto:0,observacion:""}]).forEach(it=>addMaqItem(containerId,it.monto||0,it.observacion||""))}
+  function sumMaq(containerId){let t=0;document.querySelectorAll("#"+containerId+" .extra-row").forEach(r=>{t+=numVal(r.querySelectorAll("input")[0].value)});return t}
+
   // ========== TOTALS ==========
   function updateTotals(){
     const bills=getCounts("b",BILLS),coins=getCounts("m",COINS);
@@ -409,8 +427,8 @@
     COINS.forEach(d=>{$("m_t_"+d).textContent=fmt(Number(d)*numVal(coins[d]))});
     const cash=sumCounts(BILLS,bills)+sumCounts(COINS,coins);
     const banks=numVal($("banks").value),cards=numVal($("cards").value),others=numVal($("others").value),extras=sumExtras();
-    const maqBill=numVal($("maqBillMonto").value);
-    const maqTrag=numVal($("maqTragMonto").value);
+    const maqBill=sumMaq("maqBillItems");
+    const maqTrag=sumMaq("maqTragItems");
     $("cashTotal").textContent=fmt(cash);
     $("extrasTotal").textContent=fmt(extras);
     $("pillBill").textContent="Gs. "+fmt(maqBill);
@@ -426,13 +444,16 @@
     const banks=numVal($("banks").value),cards=numVal($("cards").value),others=numVal($("others").value);
     const notes=$("notes").value||"",extras=getExtraItems(),extrasTotal=sumExtras();
     const cash=sumCounts(BILLS,bills)+sumCounts(COINS,coins);
-    const maqBill=numVal($("maqBillMonto").value);
-    const maqTrag=numVal($("maqTragMonto").value);
+    const maqBillItems=getMaqItems("maqBillItems");
+    const maqTragItems=getMaqItems("maqTragItems");
+    const maqBill=sumMaq("maqBillItems");
+    const maqTrag=sumMaq("maqTragItems");
     return{
       record_id:keyOf(date,biz),fecha:date,negocio:biz,bills,coins,
       bancos:banks,tarjetas:cards,otros:others,notas:notes,
       extras,extras_total:extrasTotal,efectivo:cash,
       maq_billetero:maqBill,maq_tragamonedas:maqTrag,
+      maq_billetero_items:maqBillItems,maq_tragamonedas_items:maqTragItems,
       total:cash+banks+cards+others+extrasTotal+maqBill+maqTrag,
       updated_at:new Date().toISOString()
     };
@@ -444,14 +465,14 @@
     $("cards").value=(rec.tarjetas||rec.cards)?String(rec.tarjetas||rec.cards):"";
     $("others").value=(rec.otros||rec.others)?String(rec.otros||rec.others):"";
     $("notes").value=rec.notas||rec.notes||"";
-    $("maqBillMonto").value=rec.maq_billetero?String(rec.maq_billetero):"";
-    $("maqTragMonto").value=rec.maq_tragamonedas?String(rec.maq_tragamonedas):"";
+    setMaqItems("maqBillItems",rec.maq_billetero_items&&rec.maq_billetero_items.length?rec.maq_billetero_items:(rec.maq_billetero?[{monto:rec.maq_billetero,observacion:""}]:[]));
+    setMaqItems("maqTragItems",rec.maq_tragamonedas_items&&rec.maq_tragamonedas_items.length?rec.maq_tragamonedas_items:(rec.maq_tragamonedas?[{monto:rec.maq_tragamonedas,observacion:""}]:[]));
     setExtraItems(rec.extras||[]);updateTotals();
   }
   function clearForm(){
     setCounts("b",BILLS,{});setCounts("m",COINS,{});
     $("banks").value="";$("cards").value="";$("others").value="";$("notes").value="";$("biz").value="";$("date").value=todayISO();
-    $("maqBillMonto").value="";$("maqTragMonto").value="";$("maqBillObs").value="";$("maqTragObs").value="";
+    setMaqItems("maqBillItems",[]);setMaqItems("maqTragItems",[]);
     setExtraItems([]);updateTotals();window.scrollTo({top:0,behavior:"smooth"});
   }
 
@@ -519,12 +540,12 @@
 
       // Guardar pagos a máquinas si hay montos
       const maqRows=[];
-      if(rec.maq_billetero>0){
-        maqRows.push({fecha:rec.fecha,tipo:"billetero",monto:rec.maq_billetero,observacion:$("maqBillObs").value||null,cobrado:false,record_id:rec.record_id});
-      }
-      if(rec.maq_tragamonedas>0){
-        maqRows.push({fecha:rec.fecha,tipo:"tragamonedas",monto:rec.maq_tragamonedas,observacion:$("maqTragObs").value||null,cobrado:false,record_id:rec.record_id});
-      }
+      (rec.maq_billetero_items||[]).forEach(it=>{
+        if(it.monto>0)maqRows.push({fecha:rec.fecha,tipo:"billetero",monto:it.monto,observacion:it.observacion||null,cobrado:false,record_id:rec.record_id});
+      });
+      (rec.maq_tragamonedas_items||[]).forEach(it=>{
+        if(it.monto>0)maqRows.push({fecha:rec.fecha,tipo:"tragamonedas",monto:it.monto,observacion:it.observacion||null,cobrado:false,record_id:rec.record_id});
+      });
       if(maqRows.length>0){
         const{error:maqErr}=await sb.from(TABLE_MAQ).insert(maqRows);
         if(maqErr)console.warn("Máquinas save error:",maqErr);
@@ -668,7 +689,7 @@
   $("date").value=todayISO();
   buildGrid("billsGrid",BILLS,"b");
   buildGrid("coinsGrid",COINS,"m");
-  ["banks","cards","others","biz","date","notes","maqBillMonto","maqTragMonto"].forEach(id=>{
+  ["banks","cards","others","biz","date","notes"].forEach(id=>{
     $(id).addEventListener("input",updateTotals);
     $(id).addEventListener("change",updateTotals);
     $(id).addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();focusNextInput(e.target)}});
@@ -676,6 +697,9 @@
   $("saveBtn").addEventListener("click",saveToCloud);
   $("newBtn").addEventListener("click",()=>{clearForm();showSync("","")});
   $("addExtraBtn").addEventListener("click",()=>{const r=addExtraItem("","");r.querySelector("input").focus()});
+  $("addMaqBillBtn").addEventListener("click",()=>{const r=addMaqItem("maqBillItems","","");r.querySelector("input").focus()});
+  $("addMaqTragBtn").addEventListener("click",()=>{const r=addMaqItem("maqTragItems","","");r.querySelector("input").focus()});
+  setMaqItems("maqBillItems",[]);setMaqItems("maqTragItems",[]);
   $("refreshBtn").addEventListener("click",renderHistory);
   $("maqRefreshBtn").addEventListener("click",renderMaquinas);
   $("maqFiltroTipo").addEventListener("change",renderMaquinas);
