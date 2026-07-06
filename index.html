@@ -434,7 +434,7 @@
     $("pillBill").textContent="Gs. "+fmt(maqBill);
     $("pillTrag").textContent="Gs. "+fmt(maqTrag);
     // pendiente total viene de supabase, solo mostramos lo de hoy por ahora
-    $("grandTotal").textContent=fmt(cash+banks+cards+others+extras+maqBill+maqTrag);
+    $("grandTotal").textContent=fmt(cash+banks+cards+others+extras);
   }
 
   // ========== RECORD ==========
@@ -454,7 +454,7 @@
       extras,extras_total:extrasTotal,efectivo:cash,
       maq_billetero:maqBill,maq_tragamonedas:maqTrag,
       maq_billetero_items:maqBillItems,maq_tragamonedas_items:maqTragItems,
-      total:cash+banks+cards+others+extrasTotal+maqBill+maqTrag,
+      total:cash+banks+cards+others+extrasTotal,
       updated_at:new Date().toISOString()
     };
   }
@@ -477,7 +477,7 @@
   }
 
   // ========== SUMMARY MODAL ==========
-  function showSummary(rec){
+  async function showSummary(rec){
     currentModalRec=rec;
     $("sumTitle").textContent=rec.negocio+" — "+rec.fecha;
     let h='';
@@ -496,8 +496,13 @@
     if(ex.length){h+='<div class="sum-section">Montos adicionales</div>';ex.forEach(it=>{h+='<div class="sum-row"><b>'+it.concepto+'</b><span class="val">'+fmt(it.monto)+'</span></div>'});h+='<div class="sum-row" style="font-weight:600"><b>Subtotal adicionales</b><span class="val">'+fmt(rec.extras_total||0)+'</span></div>'}
     if((rec.maq_billetero||0)>0||(rec.maq_tragamonedas||0)>0){
       h+='<div class="sum-section">Máquinas</div>';
-      if(rec.maq_billetero)h+='<div class="sum-row"><b>💵 Billetero</b><span class="val">'+fmt(rec.maq_billetero)+'</span></div>';
-      if(rec.maq_tragamonedas)h+='<div class="sum-row"><b>🎰 Tragamonedas</b><span class="val">'+fmt(rec.maq_tragamonedas)+'</span></div>';
+      let maqDet=[];
+      try{const{data}=await sb.from(TABLE_MAQ).select("tipo,monto,observacion").eq("record_id",rec.record_id);maqDet=data||[]}catch(e){}
+      const bd=maqDet.filter(r=>r.tipo==="billetero"),td=maqDet.filter(r=>r.tipo==="tragamonedas");
+      if(bd.length){bd.forEach(it=>{h+='<div class="sum-row"><b>💵 Billetero'+(it.observacion?' — '+it.observacion:'')+'</b><span class="val">'+fmt(it.monto)+'</span></div>'})}
+      else if(rec.maq_billetero){h+='<div class="sum-row"><b>💵 Billetero</b><span class="val">'+fmt(rec.maq_billetero)+'</span></div>'}
+      if(td.length){td.forEach(it=>{h+='<div class="sum-row"><b>🎰 Tragamonedas'+(it.observacion?' — '+it.observacion:'')+'</b><span class="val">'+fmt(it.monto)+'</span></div>'})}
+      else if(rec.maq_tragamonedas){h+='<div class="sum-row"><b>🎰 Tragamonedas</b><span class="val">'+fmt(rec.maq_tragamonedas)+'</span></div>'}
     }
     if(rec.notas){h+='<div class="sum-section">Notas</div><div style="font-size:13px;opacity:.8;white-space:pre-wrap;padding:6px 0">'+rec.notas+'</div>'}
     h+='<div class="sum-row sum-total"><b>TOTAL GENERAL</b><span class="val" style="color:#69db7c">Gs. '+fmt(rec.total||0)+'</span></div>';
@@ -532,10 +537,11 @@
     if(rec.total===0&&!confirm("El total es 0. ¿Guardar?"))return;
     showSync("loading","Guardando...");
     try{
+      const{maq_billetero_items,maq_tragamonedas_items,...recDb}=rec;
       const{data:existing}=await sb.from(TABLE).select("record_id").eq("record_id",rec.record_id).maybeSingle();
       let result;
-      if(existing)result=await sb.from(TABLE).update(rec).eq("record_id",rec.record_id);
-      else result=await sb.from(TABLE).insert(rec);
+      if(existing)result=await sb.from(TABLE).update(recDb).eq("record_id",rec.record_id);
+      else result=await sb.from(TABLE).insert(recDb);
       if(result.error)throw result.error;
 
       // Guardar pagos a máquinas si hay montos
