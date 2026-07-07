@@ -434,7 +434,7 @@
     $("pillBill").textContent="Gs. "+fmt(maqBill);
     $("pillTrag").textContent="Gs. "+fmt(maqTrag);
     // pendiente total viene de supabase, solo mostramos lo de hoy por ahora
-    $("grandTotal").textContent=fmt(cash+banks+cards+others+extras);
+    $("grandTotal").textContent=fmt(cash+banks+cards+others+extras+maqBill+maqTrag);
   }
 
   // ========== RECORD ==========
@@ -454,7 +454,7 @@
       extras,extras_total:extrasTotal,efectivo:cash,
       maq_billetero:maqBill,maq_tragamonedas:maqTrag,
       maq_billetero_items:maqBillItems,maq_tragamonedas_items:maqTragItems,
-      total:cash+banks+cards+others+extrasTotal,
+      total:cash+banks+cards+others+extrasTotal+maqBill+maqTrag,
       updated_at:new Date().toISOString()
     };
   }
